@@ -9,38 +9,204 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as StokRouteImport } from './routes/stok'
+import { Route as SesSistemiRouteImport } from './routes/ses-sistemi'
+import { Route as ServisRouteImport } from './routes/servis'
+import { Route as RaporlarRouteImport } from './routes/raporlar'
+import { Route as OzelOdemelerRouteImport } from './routes/ozel-odemeler'
+import { Route as MailOrderRouteImport } from './routes/mail-order'
+import { Route as AraclarRouteImport } from './routes/araclar'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AraclarIndexRouteImport } from './routes/araclar.index'
+import { Route as AraclarYeniRouteImport } from './routes/araclar.yeni'
 
+const StokRoute = StokRouteImport.update({
+  id: '/stok',
+  path: '/stok',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SesSistemiRoute = SesSistemiRouteImport.update({
+  id: '/ses-sistemi',
+  path: '/ses-sistemi',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServisRoute = ServisRouteImport.update({
+  id: '/servis',
+  path: '/servis',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RaporlarRoute = RaporlarRouteImport.update({
+  id: '/raporlar',
+  path: '/raporlar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OzelOdemelerRoute = OzelOdemelerRouteImport.update({
+  id: '/ozel-odemeler',
+  path: '/ozel-odemeler',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MailOrderRoute = MailOrderRouteImport.update({
+  id: '/mail-order',
+  path: '/mail-order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AraclarRoute = AraclarRouteImport.update({
+  id: '/araclar',
+  path: '/araclar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AraclarIndexRoute = AraclarIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AraclarRoute,
+} as any)
+const AraclarYeniRoute = AraclarYeniRouteImport.update({
+  id: '/yeni',
+  path: '/yeni',
+  getParentRoute: () => AraclarRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/araclar': typeof AraclarRouteWithChildren
+  '/mail-order': typeof MailOrderRoute
+  '/ozel-odemeler': typeof OzelOdemelerRoute
+  '/raporlar': typeof RaporlarRoute
+  '/servis': typeof ServisRoute
+  '/ses-sistemi': typeof SesSistemiRoute
+  '/stok': typeof StokRoute
+  '/araclar/yeni': typeof AraclarYeniRoute
+  '/araclar/': typeof AraclarIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/mail-order': typeof MailOrderRoute
+  '/ozel-odemeler': typeof OzelOdemelerRoute
+  '/raporlar': typeof RaporlarRoute
+  '/servis': typeof ServisRoute
+  '/ses-sistemi': typeof SesSistemiRoute
+  '/stok': typeof StokRoute
+  '/araclar/yeni': typeof AraclarYeniRoute
+  '/araclar': typeof AraclarIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/araclar': typeof AraclarRouteWithChildren
+  '/mail-order': typeof MailOrderRoute
+  '/ozel-odemeler': typeof OzelOdemelerRoute
+  '/raporlar': typeof RaporlarRoute
+  '/servis': typeof ServisRoute
+  '/ses-sistemi': typeof SesSistemiRoute
+  '/stok': typeof StokRoute
+  '/araclar/yeni': typeof AraclarYeniRoute
+  '/araclar/': typeof AraclarIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/araclar'
+    | '/mail-order'
+    | '/ozel-odemeler'
+    | '/raporlar'
+    | '/servis'
+    | '/ses-sistemi'
+    | '/stok'
+    | '/araclar/yeni'
+    | '/araclar/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/mail-order'
+    | '/ozel-odemeler'
+    | '/raporlar'
+    | '/servis'
+    | '/ses-sistemi'
+    | '/stok'
+    | '/araclar/yeni'
+    | '/araclar'
+  id:
+    | '__root__'
+    | '/'
+    | '/araclar'
+    | '/mail-order'
+    | '/ozel-odemeler'
+    | '/raporlar'
+    | '/servis'
+    | '/ses-sistemi'
+    | '/stok'
+    | '/araclar/yeni'
+    | '/araclar/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AraclarRoute: typeof AraclarRouteWithChildren
+  MailOrderRoute: typeof MailOrderRoute
+  OzelOdemelerRoute: typeof OzelOdemelerRoute
+  RaporlarRoute: typeof RaporlarRoute
+  ServisRoute: typeof ServisRoute
+  SesSistemiRoute: typeof SesSistemiRoute
+  StokRoute: typeof StokRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/stok': {
+      id: '/stok'
+      path: '/stok'
+      fullPath: '/stok'
+      preLoaderRoute: typeof StokRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ses-sistemi': {
+      id: '/ses-sistemi'
+      path: '/ses-sistemi'
+      fullPath: '/ses-sistemi'
+      preLoaderRoute: typeof SesSistemiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/servis': {
+      id: '/servis'
+      path: '/servis'
+      fullPath: '/servis'
+      preLoaderRoute: typeof ServisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/raporlar': {
+      id: '/raporlar'
+      path: '/raporlar'
+      fullPath: '/raporlar'
+      preLoaderRoute: typeof RaporlarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ozel-odemeler': {
+      id: '/ozel-odemeler'
+      path: '/ozel-odemeler'
+      fullPath: '/ozel-odemeler'
+      preLoaderRoute: typeof OzelOdemelerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mail-order': {
+      id: '/mail-order'
+      path: '/mail-order'
+      fullPath: '/mail-order'
+      preLoaderRoute: typeof MailOrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/araclar': {
+      id: '/araclar'
+      path: '/araclar'
+      fullPath: '/araclar'
+      preLoaderRoute: typeof AraclarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,12 +214,56 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/araclar/': {
+      id: '/araclar/'
+      path: '/'
+      fullPath: '/araclar/'
+      preLoaderRoute: typeof AraclarIndexRouteImport
+      parentRoute: typeof AraclarRoute
+    }
+    '/araclar/yeni': {
+      id: '/araclar/yeni'
+      path: '/yeni'
+      fullPath: '/araclar/yeni'
+      preLoaderRoute: typeof AraclarYeniRouteImport
+      parentRoute: typeof AraclarRoute
+    }
   }
 }
 
+interface AraclarRouteChildren {
+  AraclarYeniRoute: typeof AraclarYeniRoute
+  AraclarIndexRoute: typeof AraclarIndexRoute
+}
+
+const AraclarRouteChildren: AraclarRouteChildren = {
+  AraclarYeniRoute: AraclarYeniRoute,
+  AraclarIndexRoute: AraclarIndexRoute,
+}
+
+const AraclarRouteWithChildren =
+  AraclarRoute._addFileChildren(AraclarRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AraclarRoute: AraclarRouteWithChildren,
+  MailOrderRoute: MailOrderRoute,
+  OzelOdemelerRoute: OzelOdemelerRoute,
+  RaporlarRoute: RaporlarRoute,
+  ServisRoute: ServisRoute,
+  SesSistemiRoute: SesSistemiRoute,
+  StokRoute: StokRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
