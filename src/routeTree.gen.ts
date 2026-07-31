@@ -19,6 +19,7 @@ import { Route as AraclarRouteImport } from './routes/araclar'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StokIndexRouteImport } from './routes/stok.index'
 import { Route as AraclarIndexRouteImport } from './routes/araclar.index'
+import { Route as StokSiparislerRouteImport } from './routes/stok.siparisler'
 import { Route as StokSiparisVerRouteImport } from './routes/stok.siparis-ver'
 import { Route as AraclarYeniRouteImport } from './routes/araclar.yeni'
 
@@ -72,6 +73,11 @@ const AraclarIndexRoute = AraclarIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AraclarRoute,
 } as any)
+const StokSiparislerRoute = StokSiparislerRouteImport.update({
+  id: '/siparisler',
+  path: '/siparisler',
+  getParentRoute: () => StokRoute,
+} as any)
 const StokSiparisVerRoute = StokSiparisVerRouteImport.update({
   id: '/siparis-ver',
   path: '/siparis-ver',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/stok': typeof StokRouteWithChildren
   '/araclar/yeni': typeof AraclarYeniRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
+  '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar/': typeof AraclarIndexRoute
   '/stok/': typeof StokIndexRoute
 }
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/ses-sistemi': typeof SesSistemiRoute
   '/araclar/yeni': typeof AraclarYeniRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
+  '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar': typeof AraclarIndexRoute
   '/stok': typeof StokIndexRoute
 }
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/stok': typeof StokRouteWithChildren
   '/araclar/yeni': typeof AraclarYeniRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
+  '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar/': typeof AraclarIndexRoute
   '/stok/': typeof StokIndexRoute
 }
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/stok'
     | '/araclar/yeni'
     | '/stok/siparis-ver'
+    | '/stok/siparisler'
     | '/araclar/'
     | '/stok/'
   fileRoutesByTo: FileRoutesByTo
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/ses-sistemi'
     | '/araclar/yeni'
     | '/stok/siparis-ver'
+    | '/stok/siparisler'
     | '/araclar'
     | '/stok'
   id:
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/stok'
     | '/araclar/yeni'
     | '/stok/siparis-ver'
+    | '/stok/siparisler'
     | '/araclar/'
     | '/stok/'
   fileRoutesById: FileRoutesById
@@ -250,6 +262,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AraclarIndexRouteImport
       parentRoute: typeof AraclarRoute
     }
+    '/stok/siparisler': {
+      id: '/stok/siparisler'
+      path: '/siparisler'
+      fullPath: '/stok/siparisler'
+      preLoaderRoute: typeof StokSiparislerRouteImport
+      parentRoute: typeof StokRoute
+    }
     '/stok/siparis-ver': {
       id: '/stok/siparis-ver'
       path: '/siparis-ver'
@@ -282,11 +301,13 @@ const AraclarRouteWithChildren =
 
 interface StokRouteChildren {
   StokSiparisVerRoute: typeof StokSiparisVerRoute
+  StokSiparislerRoute: typeof StokSiparislerRoute
   StokIndexRoute: typeof StokIndexRoute
 }
 
 const StokRouteChildren: StokRouteChildren = {
   StokSiparisVerRoute: StokSiparisVerRoute,
+  StokSiparislerRoute: StokSiparislerRoute,
   StokIndexRoute: StokIndexRoute,
 }
 
