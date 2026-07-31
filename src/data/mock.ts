@@ -26,14 +26,14 @@ export const mockOperations: Operation[] = [
 ];
 
 export const mockStock: StockItem[] = [
-  { id: "s1", kategori: "multimedya", urun: "Android Multimedya 10\"", kod: "MM-10-AND", alisFiyati: 4500, satisFiyati: 7500, adet: 8, raf: "A-1", kritikSeviye: 3 },
-  { id: "s2", kategori: "multimedya", urun: "Android Multimedya 9\"", kod: "MM-09-AND", alisFiyati: 3800, satisFiyati: 6500, adet: 2, raf: "A-2", kritikSeviye: 3 },
-  { id: "s3", kategori: "multimedya", urun: "CarPlay Modülü", kod: "MM-CP-01", alisFiyati: 1200, satisFiyati: 2200, adet: 12, raf: "A-3", kritikSeviye: 5 },
-  { id: "s4", kategori: "ekran", urun: "Arka Koltuk Ekranı 10\"", kod: "EK-10-BAK", alisFiyati: 2200, satisFiyati: 3800, adet: 4, raf: "B-1", kritikSeviye: 2 },
-  { id: "s5", kategori: "ekran", urun: "Dokunmatik Ekran 7\"", kod: "EK-07-DK", alisFiyati: 900, satisFiyati: 1650, adet: 1, raf: "B-2", kritikSeviye: 3 },
-  { id: "s6", kategori: "ses_sistemi", urun: "Focal Hoparlör Seti", kod: "SS-FOC-01", alisFiyati: 5500, satisFiyati: 9200, adet: 6, raf: "C-1", kritikSeviye: 2 },
-  { id: "s7", kategori: "ses_sistemi", urun: "Subwoofer 12\"", kod: "SS-SUB-12", alisFiyati: 3200, satisFiyati: 5400, adet: 3, raf: "C-2", kritikSeviye: 2 },
-  { id: "s8", kategori: "ses_sistemi", urun: "Amplifikatör 4 Kanal", kod: "SS-AMP-4K", alisFiyati: 2800, satisFiyati: 4700, adet: 0, raf: "C-3", kritikSeviye: 2 },
+  { id: "s1", kategori: "multimedya", urun: "Android Multimedya 10\"", kod: "MM-10-AND", marka: "Teyes", tedarikci: "Elektronik A.Ş.", alisFiyati: 4500, sonAlisFiyati: 4650, satisFiyati: 7500, adet: 8, raf: "A-1", kritikSeviye: 3 },
+  { id: "s2", kategori: "multimedya", urun: "Android Multimedya 9\"", kod: "MM-09-AND", marka: "Teyes", tedarikci: "Elektronik A.Ş.", alisFiyati: 3800, sonAlisFiyati: 3900, satisFiyati: 6500, adet: 2, raf: "A-2", kritikSeviye: 3 },
+  { id: "s3", kategori: "multimedya", urun: "CarPlay Modülü", kod: "MM-CP-01", marka: "Ottocast", tedarikci: "Anadolu Oto Elektronik", alisFiyati: 1200, sonAlisFiyati: 1250, satisFiyati: 2200, adet: 12, raf: "A-3", kritikSeviye: 5 },
+  { id: "s4", kategori: "ekran", urun: "Arka Koltuk Ekranı 10\"", kod: "EK-10-BAK", marka: "Pioneer", tedarikci: "Global Import Co.", alisFiyati: 2200, sonAlisFiyati: 2300, satisFiyati: 3800, adet: 4, raf: "B-1", kritikSeviye: 2 },
+  { id: "s5", kategori: "ekran", urun: "Dokunmatik Ekran 7\"", kod: "EK-07-DK", marka: "Kenwood", tedarikci: "Global Import Co.", alisFiyati: 900, sonAlisFiyati: 950, satisFiyati: 1650, adet: 1, raf: "B-2", kritikSeviye: 3 },
+  { id: "s6", kategori: "ses_sistemi", urun: "Focal Hoparlör Seti", kod: "SS-FOC-01", marka: "Focal", tedarikci: "Focal Türkiye", alisFiyati: 5500, sonAlisFiyati: 5700, satisFiyati: 9200, adet: 6, raf: "C-1", kritikSeviye: 2 },
+  { id: "s7", kategori: "ses_sistemi", urun: "Subwoofer 12\"", kod: "SS-SUB-12", marka: "JBL", tedarikci: "Mega Ses Ltd.", alisFiyati: 3200, sonAlisFiyati: 3350, satisFiyati: 5400, adet: 3, raf: "C-2", kritikSeviye: 2 },
+  { id: "s8", kategori: "ses_sistemi", urun: "Amplifikatör 4 Kanal", kod: "SS-AMP-4K", marka: "JBL", tedarikci: "Mega Ses Ltd.", alisFiyati: 2800, sonAlisFiyati: 2900, satisFiyati: 4700, adet: 0, raf: "C-3", kritikSeviye: 2 },
 ];
 
 export const mockWholesalers: Wholesaler[] = [

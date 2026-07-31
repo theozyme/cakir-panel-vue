@@ -37,7 +37,10 @@ export interface StockItem {
   kategori: "multimedya" | "ekran" | "ses_sistemi";
   urun: string;
   kod: string;
+  marka: string;
+  tedarikci: string;
   alisFiyati: number;
+  sonAlisFiyati: number;
   satisFiyati: number;
   adet: number;
   raf: string;

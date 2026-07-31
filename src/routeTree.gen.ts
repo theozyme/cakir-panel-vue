@@ -17,7 +17,10 @@ import { Route as OzelOdemelerRouteImport } from './routes/ozel-odemeler'
 import { Route as MailOrderRouteImport } from './routes/mail-order'
 import { Route as AraclarRouteImport } from './routes/araclar'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StokIndexRouteImport } from './routes/stok.index'
 import { Route as AraclarIndexRouteImport } from './routes/araclar.index'
+import { Route as StokSiparislerRouteImport } from './routes/stok.siparisler'
+import { Route as StokSiparisVerRouteImport } from './routes/stok.siparis-ver'
 import { Route as AraclarYeniRouteImport } from './routes/araclar.yeni'
 
 const StokRoute = StokRouteImport.update({
@@ -60,10 +63,25 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StokIndexRoute = StokIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StokRoute,
+} as any)
 const AraclarIndexRoute = AraclarIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AraclarRoute,
+} as any)
+const StokSiparislerRoute = StokSiparislerRouteImport.update({
+  id: '/siparisler',
+  path: '/siparisler',
+  getParentRoute: () => StokRoute,
+} as any)
+const StokSiparisVerRoute = StokSiparisVerRouteImport.update({
+  id: '/siparis-ver',
+  path: '/siparis-ver',
+  getParentRoute: () => StokRoute,
 } as any)
 const AraclarYeniRoute = AraclarYeniRouteImport.update({
   id: '/yeni',
@@ -79,9 +97,12 @@ export interface FileRoutesByFullPath {
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
   '/ses-sistemi': typeof SesSistemiRoute
-  '/stok': typeof StokRoute
+  '/stok': typeof StokRouteWithChildren
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/stok/siparis-ver': typeof StokSiparisVerRoute
+  '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar/': typeof AraclarIndexRoute
+  '/stok/': typeof StokIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -90,9 +111,11 @@ export interface FileRoutesByTo {
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
   '/ses-sistemi': typeof SesSistemiRoute
-  '/stok': typeof StokRoute
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/stok/siparis-ver': typeof StokSiparisVerRoute
+  '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar': typeof AraclarIndexRoute
+  '/stok': typeof StokIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -103,9 +126,12 @@ export interface FileRoutesById {
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
   '/ses-sistemi': typeof SesSistemiRoute
-  '/stok': typeof StokRoute
+  '/stok': typeof StokRouteWithChildren
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/stok/siparis-ver': typeof StokSiparisVerRoute
+  '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar/': typeof AraclarIndexRoute
+  '/stok/': typeof StokIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -119,7 +145,10 @@ export interface FileRouteTypes {
     | '/ses-sistemi'
     | '/stok'
     | '/araclar/yeni'
+    | '/stok/siparis-ver'
+    | '/stok/siparisler'
     | '/araclar/'
+    | '/stok/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -128,9 +157,11 @@ export interface FileRouteTypes {
     | '/raporlar'
     | '/servis'
     | '/ses-sistemi'
-    | '/stok'
     | '/araclar/yeni'
+    | '/stok/siparis-ver'
+    | '/stok/siparisler'
     | '/araclar'
+    | '/stok'
   id:
     | '__root__'
     | '/'
@@ -142,7 +173,10 @@ export interface FileRouteTypes {
     | '/ses-sistemi'
     | '/stok'
     | '/araclar/yeni'
+    | '/stok/siparis-ver'
+    | '/stok/siparisler'
     | '/araclar/'
+    | '/stok/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -153,7 +187,7 @@ export interface RootRouteChildren {
   RaporlarRoute: typeof RaporlarRoute
   ServisRoute: typeof ServisRoute
   SesSistemiRoute: typeof SesSistemiRoute
-  StokRoute: typeof StokRoute
+  StokRoute: typeof StokRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -214,12 +248,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stok/': {
+      id: '/stok/'
+      path: '/'
+      fullPath: '/stok/'
+      preLoaderRoute: typeof StokIndexRouteImport
+      parentRoute: typeof StokRoute
+    }
     '/araclar/': {
       id: '/araclar/'
       path: '/'
       fullPath: '/araclar/'
       preLoaderRoute: typeof AraclarIndexRouteImport
       parentRoute: typeof AraclarRoute
+    }
+    '/stok/siparisler': {
+      id: '/stok/siparisler'
+      path: '/siparisler'
+      fullPath: '/stok/siparisler'
+      preLoaderRoute: typeof StokSiparislerRouteImport
+      parentRoute: typeof StokRoute
+    }
+    '/stok/siparis-ver': {
+      id: '/stok/siparis-ver'
+      path: '/siparis-ver'
+      fullPath: '/stok/siparis-ver'
+      preLoaderRoute: typeof StokSiparisVerRouteImport
+      parentRoute: typeof StokRoute
     }
     '/araclar/yeni': {
       id: '/araclar/yeni'
@@ -244,6 +299,20 @@ const AraclarRouteChildren: AraclarRouteChildren = {
 const AraclarRouteWithChildren =
   AraclarRoute._addFileChildren(AraclarRouteChildren)
 
+interface StokRouteChildren {
+  StokSiparisVerRoute: typeof StokSiparisVerRoute
+  StokSiparislerRoute: typeof StokSiparislerRoute
+  StokIndexRoute: typeof StokIndexRoute
+}
+
+const StokRouteChildren: StokRouteChildren = {
+  StokSiparisVerRoute: StokSiparisVerRoute,
+  StokSiparislerRoute: StokSiparislerRoute,
+  StokIndexRoute: StokIndexRoute,
+}
+
+const StokRouteWithChildren = StokRoute._addFileChildren(StokRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AraclarRoute: AraclarRouteWithChildren,
@@ -252,7 +321,7 @@ const rootRouteChildren: RootRouteChildren = {
   RaporlarRoute: RaporlarRoute,
   ServisRoute: ServisRoute,
   SesSistemiRoute: SesSistemiRoute,
-  StokRoute: StokRoute,
+  StokRoute: StokRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
