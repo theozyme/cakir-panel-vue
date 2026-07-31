@@ -17,6 +17,7 @@ import { Route as OzelOdemelerRouteImport } from './routes/ozel-odemeler'
 import { Route as MailOrderRouteImport } from './routes/mail-order'
 import { Route as AraclarRouteImport } from './routes/araclar'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StokIndexRouteImport } from './routes/stok.index'
 import { Route as AraclarIndexRouteImport } from './routes/araclar.index'
 import { Route as AraclarYeniRouteImport } from './routes/araclar.yeni'
 
@@ -60,6 +61,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StokIndexRoute = StokIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StokRoute,
+} as any)
 const AraclarIndexRoute = AraclarIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -79,9 +85,10 @@ export interface FileRoutesByFullPath {
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
   '/ses-sistemi': typeof SesSistemiRoute
-  '/stok': typeof StokRoute
+  '/stok': typeof StokRouteWithChildren
   '/araclar/yeni': typeof AraclarYeniRoute
   '/araclar/': typeof AraclarIndexRoute
+  '/stok/': typeof StokIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -90,9 +97,9 @@ export interface FileRoutesByTo {
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
   '/ses-sistemi': typeof SesSistemiRoute
-  '/stok': typeof StokRoute
   '/araclar/yeni': typeof AraclarYeniRoute
   '/araclar': typeof AraclarIndexRoute
+  '/stok': typeof StokIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -103,9 +110,10 @@ export interface FileRoutesById {
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
   '/ses-sistemi': typeof SesSistemiRoute
-  '/stok': typeof StokRoute
+  '/stok': typeof StokRouteWithChildren
   '/araclar/yeni': typeof AraclarYeniRoute
   '/araclar/': typeof AraclarIndexRoute
+  '/stok/': typeof StokIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -120,6 +128,7 @@ export interface FileRouteTypes {
     | '/stok'
     | '/araclar/yeni'
     | '/araclar/'
+    | '/stok/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -128,9 +137,9 @@ export interface FileRouteTypes {
     | '/raporlar'
     | '/servis'
     | '/ses-sistemi'
-    | '/stok'
     | '/araclar/yeni'
     | '/araclar'
+    | '/stok'
   id:
     | '__root__'
     | '/'
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | '/stok'
     | '/araclar/yeni'
     | '/araclar/'
+    | '/stok/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -153,7 +163,7 @@ export interface RootRouteChildren {
   RaporlarRoute: typeof RaporlarRoute
   ServisRoute: typeof ServisRoute
   SesSistemiRoute: typeof SesSistemiRoute
-  StokRoute: typeof StokRoute
+  StokRoute: typeof StokRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -214,6 +224,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stok/': {
+      id: '/stok/'
+      path: '/'
+      fullPath: '/stok/'
+      preLoaderRoute: typeof StokIndexRouteImport
+      parentRoute: typeof StokRoute
+    }
     '/araclar/': {
       id: '/araclar/'
       path: '/'
@@ -244,6 +261,16 @@ const AraclarRouteChildren: AraclarRouteChildren = {
 const AraclarRouteWithChildren =
   AraclarRoute._addFileChildren(AraclarRouteChildren)
 
+interface StokRouteChildren {
+  StokIndexRoute: typeof StokIndexRoute
+}
+
+const StokRouteChildren: StokRouteChildren = {
+  StokIndexRoute: StokIndexRoute,
+}
+
+const StokRouteWithChildren = StokRoute._addFileChildren(StokRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AraclarRoute: AraclarRouteWithChildren,
@@ -252,7 +279,7 @@ const rootRouteChildren: RootRouteChildren = {
   RaporlarRoute: RaporlarRoute,
   ServisRoute: ServisRoute,
   SesSistemiRoute: SesSistemiRoute,
-  StokRoute: StokRoute,
+  StokRoute: StokRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
