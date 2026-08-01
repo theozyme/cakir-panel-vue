@@ -18,9 +18,12 @@ import { Route as MailOrderRouteImport } from './routes/mail-order'
 import { Route as AraclarRouteImport } from './routes/araclar'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StokIndexRouteImport } from './routes/stok.index'
+import { Route as SesSistemiIndexRouteImport } from './routes/ses-sistemi.index'
 import { Route as AraclarIndexRouteImport } from './routes/araclar.index'
 import { Route as StokSiparislerRouteImport } from './routes/stok.siparisler'
 import { Route as StokSiparisVerRouteImport } from './routes/stok.siparis-ver'
+import { Route as SesSistemiTeklifVerRouteImport } from './routes/ses-sistemi.teklif-ver'
+import { Route as SesSistemiTeklifGecmisiRouteImport } from './routes/ses-sistemi.teklif-gecmisi'
 import { Route as AraclarYeniRouteImport } from './routes/araclar.yeni'
 
 const StokRoute = StokRouteImport.update({
@@ -68,6 +71,11 @@ const StokIndexRoute = StokIndexRouteImport.update({
   path: '/',
   getParentRoute: () => StokRoute,
 } as any)
+const SesSistemiIndexRoute = SesSistemiIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SesSistemiRoute,
+} as any)
 const AraclarIndexRoute = AraclarIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -83,6 +91,16 @@ const StokSiparisVerRoute = StokSiparisVerRouteImport.update({
   path: '/siparis-ver',
   getParentRoute: () => StokRoute,
 } as any)
+const SesSistemiTeklifVerRoute = SesSistemiTeklifVerRouteImport.update({
+  id: '/teklif-ver',
+  path: '/teklif-ver',
+  getParentRoute: () => SesSistemiRoute,
+} as any)
+const SesSistemiTeklifGecmisiRoute = SesSistemiTeklifGecmisiRouteImport.update({
+  id: '/teklif-gecmisi',
+  path: '/teklif-gecmisi',
+  getParentRoute: () => SesSistemiRoute,
+} as any)
 const AraclarYeniRoute = AraclarYeniRouteImport.update({
   id: '/yeni',
   path: '/yeni',
@@ -96,12 +114,15 @@ export interface FileRoutesByFullPath {
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
-  '/ses-sistemi': typeof SesSistemiRoute
+  '/ses-sistemi': typeof SesSistemiRouteWithChildren
   '/stok': typeof StokRouteWithChildren
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/ses-sistemi/teklif-gecmisi': typeof SesSistemiTeklifGecmisiRoute
+  '/ses-sistemi/teklif-ver': typeof SesSistemiTeklifVerRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
   '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar/': typeof AraclarIndexRoute
+  '/ses-sistemi/': typeof SesSistemiIndexRoute
   '/stok/': typeof StokIndexRoute
 }
 export interface FileRoutesByTo {
@@ -110,11 +131,13 @@ export interface FileRoutesByTo {
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
-  '/ses-sistemi': typeof SesSistemiRoute
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/ses-sistemi/teklif-gecmisi': typeof SesSistemiTeklifGecmisiRoute
+  '/ses-sistemi/teklif-ver': typeof SesSistemiTeklifVerRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
   '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar': typeof AraclarIndexRoute
+  '/ses-sistemi': typeof SesSistemiIndexRoute
   '/stok': typeof StokIndexRoute
 }
 export interface FileRoutesById {
@@ -125,12 +148,15 @@ export interface FileRoutesById {
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
-  '/ses-sistemi': typeof SesSistemiRoute
+  '/ses-sistemi': typeof SesSistemiRouteWithChildren
   '/stok': typeof StokRouteWithChildren
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/ses-sistemi/teklif-gecmisi': typeof SesSistemiTeklifGecmisiRoute
+  '/ses-sistemi/teklif-ver': typeof SesSistemiTeklifVerRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
   '/stok/siparisler': typeof StokSiparislerRoute
   '/araclar/': typeof AraclarIndexRoute
+  '/ses-sistemi/': typeof SesSistemiIndexRoute
   '/stok/': typeof StokIndexRoute
 }
 export interface FileRouteTypes {
@@ -145,9 +171,12 @@ export interface FileRouteTypes {
     | '/ses-sistemi'
     | '/stok'
     | '/araclar/yeni'
+    | '/ses-sistemi/teklif-gecmisi'
+    | '/ses-sistemi/teklif-ver'
     | '/stok/siparis-ver'
     | '/stok/siparisler'
     | '/araclar/'
+    | '/ses-sistemi/'
     | '/stok/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -156,11 +185,13 @@ export interface FileRouteTypes {
     | '/ozel-odemeler'
     | '/raporlar'
     | '/servis'
-    | '/ses-sistemi'
     | '/araclar/yeni'
+    | '/ses-sistemi/teklif-gecmisi'
+    | '/ses-sistemi/teklif-ver'
     | '/stok/siparis-ver'
     | '/stok/siparisler'
     | '/araclar'
+    | '/ses-sistemi'
     | '/stok'
   id:
     | '__root__'
@@ -173,9 +204,12 @@ export interface FileRouteTypes {
     | '/ses-sistemi'
     | '/stok'
     | '/araclar/yeni'
+    | '/ses-sistemi/teklif-gecmisi'
+    | '/ses-sistemi/teklif-ver'
     | '/stok/siparis-ver'
     | '/stok/siparisler'
     | '/araclar/'
+    | '/ses-sistemi/'
     | '/stok/'
   fileRoutesById: FileRoutesById
 }
@@ -186,7 +220,7 @@ export interface RootRouteChildren {
   OzelOdemelerRoute: typeof OzelOdemelerRoute
   RaporlarRoute: typeof RaporlarRoute
   ServisRoute: typeof ServisRoute
-  SesSistemiRoute: typeof SesSistemiRoute
+  SesSistemiRoute: typeof SesSistemiRouteWithChildren
   StokRoute: typeof StokRouteWithChildren
 }
 
@@ -255,6 +289,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StokIndexRouteImport
       parentRoute: typeof StokRoute
     }
+    '/ses-sistemi/': {
+      id: '/ses-sistemi/'
+      path: '/'
+      fullPath: '/ses-sistemi/'
+      preLoaderRoute: typeof SesSistemiIndexRouteImport
+      parentRoute: typeof SesSistemiRoute
+    }
     '/araclar/': {
       id: '/araclar/'
       path: '/'
@@ -275,6 +316,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/stok/siparis-ver'
       preLoaderRoute: typeof StokSiparisVerRouteImport
       parentRoute: typeof StokRoute
+    }
+    '/ses-sistemi/teklif-ver': {
+      id: '/ses-sistemi/teklif-ver'
+      path: '/teklif-ver'
+      fullPath: '/ses-sistemi/teklif-ver'
+      preLoaderRoute: typeof SesSistemiTeklifVerRouteImport
+      parentRoute: typeof SesSistemiRoute
+    }
+    '/ses-sistemi/teklif-gecmisi': {
+      id: '/ses-sistemi/teklif-gecmisi'
+      path: '/teklif-gecmisi'
+      fullPath: '/ses-sistemi/teklif-gecmisi'
+      preLoaderRoute: typeof SesSistemiTeklifGecmisiRouteImport
+      parentRoute: typeof SesSistemiRoute
     }
     '/araclar/yeni': {
       id: '/araclar/yeni'
@@ -299,6 +354,22 @@ const AraclarRouteChildren: AraclarRouteChildren = {
 const AraclarRouteWithChildren =
   AraclarRoute._addFileChildren(AraclarRouteChildren)
 
+interface SesSistemiRouteChildren {
+  SesSistemiTeklifGecmisiRoute: typeof SesSistemiTeklifGecmisiRoute
+  SesSistemiTeklifVerRoute: typeof SesSistemiTeklifVerRoute
+  SesSistemiIndexRoute: typeof SesSistemiIndexRoute
+}
+
+const SesSistemiRouteChildren: SesSistemiRouteChildren = {
+  SesSistemiTeklifGecmisiRoute: SesSistemiTeklifGecmisiRoute,
+  SesSistemiTeklifVerRoute: SesSistemiTeklifVerRoute,
+  SesSistemiIndexRoute: SesSistemiIndexRoute,
+}
+
+const SesSistemiRouteWithChildren = SesSistemiRoute._addFileChildren(
+  SesSistemiRouteChildren,
+)
+
 interface StokRouteChildren {
   StokSiparisVerRoute: typeof StokSiparisVerRoute
   StokSiparislerRoute: typeof StokSiparislerRoute
@@ -320,9 +391,19 @@ const rootRouteChildren: RootRouteChildren = {
   OzelOdemelerRoute: OzelOdemelerRoute,
   RaporlarRoute: RaporlarRoute,
   ServisRoute: ServisRoute,
-  SesSistemiRoute: SesSistemiRoute,
+  SesSistemiRoute: SesSistemiRouteWithChildren,
   StokRoute: StokRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
