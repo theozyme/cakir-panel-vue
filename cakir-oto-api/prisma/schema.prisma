@@ -1,0 +1,456 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  BANK_TRANSFER
+  MAIL_ORDER
+}
+
+enum VehicleOperationType {
+  MULTIMEDIA
+  SOUND_SYSTEM
+  SERVICE
+  ACCESSORY
+  OTHER
+}
+
+enum SupplierTransactionType {
+  DEBT_INCREASE
+  PAYMENT
+  ADJUSTMENT
+  CANCEL
+}
+
+enum SupplierTransactionSourceType {
+  MANUAL
+  VEHICLE_OPERATION
+  MIGRATION
+}
+
+enum SoundSaleType {
+  CASH
+  CARD
+}
+
+enum SoundOfferStatus {
+  DRAFT
+  ACCEPTED
+  USED
+  CANCELLED
+}
+
+enum StockType {
+  MULTIMEDIA
+  SCREEN
+  SOUND_SYSTEM
+}
+
+enum StockMovementType {
+  PURCHASE
+  VEHICLE_OPERATION
+  ORDER_DELIVERY
+  MANUAL_CORRECTION
+}
+
+enum ExpenseCategoryType {
+  GENERAL
+  SGK
+  CUSTOM
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  firstName String?  @map("first_name") @db.VarChar(100)
+  lastName  String?  @map("last_name") @db.VarChar(100)
+  phone     String?  @db.VarChar(30)
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  visits VehicleVisit[]
+
+  @@map("customers")
+}
+
+model Vehicle {
+  id              String   @id @default(uuid())
+  plate           String   @unique @db.VarChar(20)
+  /// DB migration enforces NOT NULL and fills this via trigger; optional here keeps the legacy importer input-compatible.
+  normalizedPlate String?  @unique @map("normalized_plate") @db.VarChar(20)
+  brand           String?  @db.VarChar(100)
+  model           String?  @db.VarChar(100)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  visits     VehicleVisit[]
+  operations VehicleOperation[]
+
+  @@map("vehicles")
+}
+
+model PendingVehicle {
+  id        String   @id @default(uuid())
+  plate     String   @unique @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("pending_vehicles")
+}
+
+model VehicleVisit {
+  id         String   @id @default(uuid())
+  vehicleId  String   @map("vehicle_id")
+  customerId String?  @map("customer_id")
+  arrivalAt  DateTime @map("arrival_at")
+  note       String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  vehicle    Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  customer   Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  operations VehicleOperation[]
+
+  @@index([vehicleId])
+  @@index([customerId])
+  @@index([arrivalAt])
+  @@map("vehicle_visits")
+}
+
+model VehicleOperation {
+  id            String                @id @default(uuid())
+  visitId       String                @map("visit_id")
+  vehicleId     String                @map("vehicle_id")
+  description   String                @db.VarChar(150)
+  operationType VehicleOperationType? @map("operation_type")
+  price         Decimal               @db.Decimal(14, 2)
+  currency      String                @default("TRY") @db.VarChar(3)
+  paymentMethod PaymentMethod         @map("payment_method")
+  operationAt   DateTime              @map("operation_at")
+  note          String?               @db.Text
+
+  mailOrderSupplierId String? @map("mail_order_supplier_id")
+  multimediaProductId String? @map("multimedia_product_id")
+  screenProductId     String? @map("screen_product_id")
+  soundOfferId        String? @unique @map("sound_offer_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  visit             VehicleVisit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  vehicle           Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  mailOrderSupplier Supplier?          @relation(fields: [mailOrderSupplierId], references: [id], onDelete: SetNull)
+  multimediaProduct MultimediaProduct? @relation(fields: [multimediaProductId], references: [id], onDelete: SetNull)
+  screenProduct     ScreenProduct?     @relation(fields: [screenProductId], references: [id], onDelete: SetNull)
+  soundOffer        SoundSystemOffer?  @relation(fields: [soundOfferId], references: [id], onDelete: SetNull)
+
+  @@index([visitId])
+  @@index([vehicleId])
+  @@index([paymentMethod])
+  @@index([operationAt])
+  @@index([mailOrderSupplierId])
+  @@map("vehicle_operations")
+}
+
+model MultimediaProduct {
+  id        String   @id @default(uuid())
+  code      String   @db.VarChar(100)
+  forx      String?  @db.VarChar(100)
+  model     String?  @db.VarChar(150)
+  brand     String?  @db.VarChar(100)
+  shelf     String?  @db.VarChar(30)
+  quantity  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  operations VehicleOperation[]
+
+  @@index([code])
+  @@index([brand])
+  @@map("multimedia_products")
+}
+
+model ScreenProduct {
+  id        String   @id @default(uuid())
+  brand     String   @db.VarChar(150)
+  storageGb Int?     @map("storage_gb")
+  ramGb     Int?     @map("ram_gb")
+  cores     Int?
+  sizeInch  Decimal? @map("size_inch") @db.Decimal(5, 2)
+  sizeLabel String?  @map("size_label") @db.VarChar(100)
+  quantity  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  operations VehicleOperation[]
+
+  @@index([brand])
+  @@map("screen_products")
+}
+
+model SoundSystemProduct {
+  id                 String   @id @default(uuid())
+  name               String   @unique @db.VarChar(180)
+  purchasePriceUsd   Decimal? @map("purchase_price_usd") @db.Decimal(14, 2)
+  cashSalePrice      Decimal? @map("cash_sale_price") @db.Decimal(14, 2)
+  cardSalePrice      Decimal? @map("card_sale_price") @db.Decimal(14, 2)
+  quantity           Int      @default(0)
+  criticalStockLevel Int      @default(0) @map("critical_stock_level")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  offerItems SoundSystemOfferItem[]
+
+  @@index([name])
+  @@map("sound_system_products")
+}
+
+model SoundSystemOffer {
+  id           String           @id @default(uuid())
+  createdBy    String?          @map("created_by") @db.VarChar(100)
+  manualTotal  Decimal?         @map("manual_total") @db.Decimal(14, 2)
+  autoTotal    Decimal          @map("auto_total") @db.Decimal(14, 2)
+  exchangeRate Decimal          @map("exchange_rate") @db.Decimal(14, 4)
+  saleType     SoundSaleType    @map("sale_type")
+  status       SoundOfferStatus @default(DRAFT)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  items     SoundSystemOfferItem[]
+  operation VehicleOperation?
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("sound_system_offers")
+}
+
+model SoundSystemOfferItem {
+  id                   String   @id @default(uuid())
+  offerId              String   @map("offer_id")
+  productId            String?  @map("product_id")
+  productNameSnapshot  String   @map("product_name_snapshot") @db.VarChar(180)
+  unitPurchasePriceUsd Decimal? @map("unit_purchase_price_usd") @db.Decimal(14, 2)
+  quantity             Int
+  lineTotal            Decimal? @map("line_total") @db.Decimal(14, 2)
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  offer   SoundSystemOffer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  product SoundSystemProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([offerId])
+  @@index([productId])
+  @@map("sound_system_offer_items")
+}
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  stockType     StockType         @map("stock_type")
+  productId     String            @map("product_id")
+  movementType  StockMovementType @map("movement_type")
+  quantity      Int
+  referenceType String?           @map("reference_type") @db.VarChar(40)
+  referenceId   String?           @map("reference_id")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  @@index([stockType, productId])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String   @unique @db.VarChar(150)
+  currency  String   @db.VarChar(3)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  transactions SupplierTransaction[]
+  operations   VehicleOperation[]
+
+  @@index([name])
+  @@map("suppliers")
+}
+
+model SupplierTransaction {
+  id            String                        @id @default(uuid())
+  supplierId    String                        @map("supplier_id")
+  type          SupplierTransactionType
+  amount        Decimal                       @db.Decimal(14, 2)
+  currency      String                        @db.VarChar(3)
+  balanceAfter  Decimal?                      @map("balance_after") @db.Decimal(14, 2)
+  note          String?                       @db.Text
+  transactionAt DateTime                      @map("transaction_at")
+  sourceType    SupplierTransactionSourceType @default(MANUAL) @map("source_type")
+  sourceId      String?                       @map("source_id")
+  createdAt     DateTime                      @default(now()) @map("created_at")
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceType, sourceId])
+  @@index([supplierId])
+  @@index([transactionAt])
+  @@index([sourceType, sourceId])
+  @@map("supplier_transactions")
+}
+
+model ExpensePersonnel {
+  id        String   @id @default(uuid())
+  name      String   @unique @db.VarChar(150)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  payments ExpensePersonnelPayment[]
+
+  @@map("expense_personnel")
+}
+
+model ExpensePersonnelPayment {
+  id          String   @id @default(uuid())
+  personnelId String   @map("personnel_id")
+  paymentDate DateTime @map("payment_date") @db.Date
+  amount      Decimal  @db.Decimal(14, 2)
+  note        String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  personnel ExpensePersonnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+
+  @@index([personnelId])
+  @@index([paymentDate])
+  @@map("expense_personnel_payments")
+}
+
+model ExpenseCategory {
+  id           String              @id @default(uuid())
+  name         String              @unique @db.VarChar(150)
+  categoryType ExpenseCategoryType @map("category_type")
+  isSystem     Boolean             @default(false) @map("is_system")
+  isActive     Boolean             @default(true) @map("is_active")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  records ExpenseRecord[]
+
+  @@map("expense_categories")
+}
+
+model ExpenseRecord {
+  id          String   @id @default(uuid())
+  categoryId  String   @map("category_id")
+  expenseDate DateTime @map("expense_date") @db.Date
+  amount      Decimal  @db.Decimal(14, 2)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  category ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId])
+  @@index([expenseDate])
+  @@map("expense_records")
+}
+
+model LoanAccount {
+  id        String   @id @default(uuid())
+  name      String   @unique @db.VarChar(150)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  payments LoanPayment[]
+
+  @@map("loan_accounts")
+}
+
+model LoanPayment {
+  id            String   @id @default(uuid())
+  loanAccountId String   @map("loan_account_id")
+  paymentDate   DateTime @map("payment_date") @db.Date
+  amount        Decimal  @db.Decimal(14, 2)
+  note          String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  loanAccount LoanAccount @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
+
+  @@index([loanAccountId])
+  @@index([paymentDate])
+  @@map("loan_payments")
+}
+
+model InvoiceType {
+  id        String   @id @default(uuid())
+  name      String   @unique @db.VarChar(150)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  payments InvoicePayment[]
+
+  @@map("invoice_types")
+}
+
+model InvoicePayment {
+  id            String   @id @default(uuid())
+  invoiceTypeId String   @map("invoice_type_id")
+  paymentDate   DateTime @map("payment_date") @db.Date
+  amount        Decimal  @db.Decimal(14, 2)
+  note          String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  invoiceType InvoiceType @relation(fields: [invoiceTypeId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceTypeId])
+  @@index([paymentDate])
+  @@map("invoice_payments")
+}
+
+model MigrationBatch {
+  id         String @id @default(uuid())
+  dataType   String @map("data_type") @db.VarChar(50)
+  sourceFile String @map("source_file") @db.VarChar(255)
+  fileHash   String @unique @map("file_hash") @db.VarChar(64)
+  status     String @db.VarChar(30)
+
+  totalCount   Int @default(0) @map("total_count")
+  successCount Int @default(0) @map("success_count")
+  skippedCount Int @default(0) @map("skipped_count")
+  errorCount   Int @default(0) @map("error_count")
+
+  uploadedBy String?   @map("uploaded_by") @db.VarChar(100)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  finishedAt DateTime? @map("finished_at")
+
+  errors MigrationError[]
+
+  @@index([dataType])
+  @@index([createdAt])
+  @@map("migration_batches")
+}
+
+model MigrationError {
+  id              String   @id @default(uuid())
+  batchId         String   @map("batch_id")
+  legacyKey       String?  @map("legacy_key") @db.VarChar(255)
+  sourceReference String?  @map("source_reference") @db.Text
+  errorType       String   @map("error_type") @db.VarChar(50)
+  message         String   @db.Text
+  rawPayload      Json?    @map("raw_payload")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  batch MigrationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([errorType])
+  @@map("migration_errors")
+}

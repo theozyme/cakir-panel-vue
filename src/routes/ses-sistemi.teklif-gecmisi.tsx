@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import Decimal from "decimal.js";
 import { ArrowLeft } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { formatTRY, StatusBadge } from "@/components/shared/StatusBadge";
-import { useAudioStore } from "@/store/audioStore";
-import { saleTypeLabels } from "@/types/audio";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { apiRequest } from "@/lib/api";
+import { formatMoneyString } from "@/lib/money";
+import type { SoundOffer } from "@/types/business";
 
 export const Route = createFileRoute("/ses-sistemi/teklif-gecmisi")({
   head: () => ({
@@ -18,7 +21,11 @@ export const Route = createFileRoute("/ses-sistemi/teklif-gecmisi")({
 });
 
 function TeklifGecmisi() {
-  const { quotes } = useAudioStore();
+  const offersQuery = useQuery({
+    queryKey: ["sound-offers"],
+    queryFn: () => apiRequest<SoundOffer[]>("/api/sound-offers"),
+  });
+  const offers = offersQuery.data ?? [];
 
   return (
     <AppLayout title="Ses Sistemi · Teklif Geçmişi">
@@ -32,7 +39,7 @@ function TeklifGecmisi() {
       <div className="card-elevated overflow-hidden">
         <div className="p-5 pb-3">
           <h2 className="text-base font-bold">Teklif Geçmişi</h2>
-          <p className="text-xs text-muted-foreground">{quotes.length} kayıt</p>
+          <p className="text-xs text-muted-foreground">{offers.length} kayıt</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -49,28 +56,55 @@ function TeklifGecmisi() {
               </tr>
             </thead>
             <tbody>
-              {quotes.map((q) => (
-                <tr key={q.id} className="border-t border-border/60">
-                  <td className="px-4 py-3 font-semibold">{q.no}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{q.tarih}</td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{q.musteri}</div>
-                    {q.plaka && <div className="text-xs text-muted-foreground">{q.plaka}</div>}
-                  </td>
-                  <td className="px-4 py-3">{saleTypeLabels[q.satisTipi]}</td>
-                  <td className="px-4 py-3 text-right">{q.kalemler.length}</td>
-                  <td className="px-4 py-3 text-right font-bold">{formatTRY(q.nihaiTutar)}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-success">
-                    {formatTRY(q.tahminiKar)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge tone={q.durum === "onaylandi" ? "success" : "warning"}>
-                      {q.durum === "onaylandi" ? "Onaylandı" : "Beklemede"}
-                    </StatusBadge>
+              {offers.map((offer) => {
+                const cost = offer.items.reduce(
+                  (total, item) =>
+                    item.unitPurchasePriceUsd
+                      ? total.plus(
+                          new Decimal(item.unitPurchasePriceUsd)
+                            .mul(offer.exchangeRate)
+                            .mul(item.quantity),
+                        )
+                      : total,
+                  new Decimal(0),
+                );
+                const profit = new Decimal(offer.finalTotal).minus(cost);
+
+                return (
+                  <tr key={offer.id} className="border-t border-border/60">
+                    <td className="px-4 py-3 font-semibold">
+                      {offer.id.slice(0, 8).toUpperCase()}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {new Date(offer.createdAt).toLocaleDateString("tr-TR")}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">-</td>
+                    <td className="px-4 py-3">
+                      {offer.saleType === "CASH" ? "Nakit" : "Kredi Kartı"}
+                    </td>
+                    <td className="px-4 py-3 text-right">{offer.items.length}</td>
+                    <td className="px-4 py-3 text-right font-bold">
+                      {formatMoneyString(offer.finalTotal, "TRY")}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-success">
+                      {formatMoneyString(profit.toFixed(2), "TRY")}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge tone={offer.status === "USED" ? "success" : "warning"}>
+                        {offer.status === "USED" ? "Kullanıldı" : "Onaylandı"}
+                      </StatusBadge>
+                    </td>
+                  </tr>
+                );
+              })}
+              {offersQuery.error instanceof Error && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-destructive">
+                    {offersQuery.error.message}
                   </td>
                 </tr>
-              ))}
-              {quotes.length === 0 && (
+              )}
+              {!offersQuery.isLoading && offers.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                     Henüz teklif yok.

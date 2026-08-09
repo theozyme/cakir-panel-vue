@@ -1,139 +1,222 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Decimal from "decimal.js";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+
 import { AppLayout } from "@/components/layout/AppLayout";
-import { formatTRY } from "@/components/shared/StatusBadge";
-import { createQuote, nextQuoteNo, useAudioStore } from "@/store/audioStore";
-import type { SaleType } from "@/types/audio";
+import { apiRequest } from "@/lib/api";
+import { formatMoneyString } from "@/lib/money";
+import type {
+  SoundOffer,
+  SoundSystemProduct,
+  UsdExchangeRate,
+  VehicleVisitDetail,
+} from "@/types/business";
+
+type OfferSearch = { visitId?: string };
+
+const SOUND_OFFER_PREVIEW_MULTIPLIERS = {
+  CASH: new Decimal("1.50"),
+  CARD: new Decimal("1.60"),
+} as const;
+
+const calculateSalePriceTry = (
+  product: SoundSystemProduct,
+  exchangeRate: Decimal,
+  saleType: "CASH" | "CARD",
+): Decimal | null =>
+  product.purchasePriceUsd === null
+    ? null
+    : new Decimal(product.purchasePriceUsd)
+        .mul(exchangeRate)
+        .mul(SOUND_OFFER_PREVIEW_MULTIPLIERS[saleType]);
 
 export const Route = createFileRoute("/ses-sistemi/teklif-ver")({
+  validateSearch: (search: Record<string, unknown>): OfferSearch => ({
+    ...(typeof search.visitId === "string" ? { visitId: search.visitId } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Teklif Ver · Ses Sistemi · Çakır Oto" },
-      { name: "description", content: "Ses sistemi ürünleri için müşteri teklifi oluşturun." },
-      { property: "og:title", content: "Teklif Ver" },
-      { property: "og:description", content: "Nakit veya kredi kartı fiyatıyla ses sistemi teklifi." },
+      { name: "description", content: "Alış USD fiyatı ve güncel kurla ses sistemi teklifi." },
     ],
   }),
   component: TeklifVer,
 });
 
 function TeklifVer() {
-  const { products } = useAudioStore();
+  const { visitId } = Route.useSearch();
   const navigate = useNavigate();
-  const [satisTipi, setSatisTipi] = useState<SaleType>("nakit");
-  const [musteri, setMusteri] = useState("");
-  const [plaka, setPlaka] = useState("");
+  const queryClient = useQueryClient();
+  const [saleType, setSaleType] = useState<"CASH" | "CARD">("CASH");
   const [selected, setSelected] = useState<Record<string, number>>({});
-  const [nihai, setNihai] = useState("");
+  const [manualTotal, setManualTotal] = useState("");
 
-  const price = (p: (typeof products)[number]) =>
-    satisTipi === "nakit" ? p.nakitSatisFiyati : p.kartSatisFiyati;
+  const productsQuery = useQuery({
+    queryKey: ["stock", "sound-system"],
+    queryFn: () => apiRequest<SoundSystemProduct[]>("/api/stock/sound-system-products?active=true"),
+  });
+  const rateQuery = useQuery({
+    queryKey: ["exchange-rate", "USD"],
+    queryFn: () => apiRequest<UsdExchangeRate>("/api/exchange-rates/usd"),
+  });
+  const visitQuery = useQuery({
+    queryKey: ["vehicle-visit", visitId],
+    queryFn: () => apiRequest<VehicleVisitDetail>(`/api/vehicle-visits/${visitId}`),
+    enabled: Boolean(visitId),
+  });
 
+  const products = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
   const lines = useMemo(
     () =>
       products
-        .filter((p) => selected[p.id] !== undefined)
-        .map((p) => ({ p, adet: Math.max(1, selected[p.id] ?? 1) })),
+        .filter((product) => selected[product.id] !== undefined)
+        .map((product) => ({ product, quantity: Math.max(1, selected[product.id] ?? 1) })),
     [products, selected],
   );
+  const exchangeRate = new Decimal(rateQuery.data?.rate ?? "0");
+  const autoTotal = lines
+    .reduce((total, line) => {
+      const salePriceTry = calculateSalePriceTry(line.product, exchangeRate, saleType);
+      return salePriceTry
+        ? total.plus(salePriceTry.mul(line.quantity).toDecimalPlaces(2, Decimal.ROUND_HALF_UP))
+        : total;
+    }, new Decimal(0))
+    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+  const costTotal = lines
+    .reduce((total, line) => {
+      return line.product.purchasePriceUsd
+        ? total.plus(
+            new Decimal(line.product.purchasePriceUsd).mul(exchangeRate).mul(line.quantity),
+          )
+        : total;
+    }, new Decimal(0))
+    .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+  const parsedManualTotal = (() => {
+    if (!manualTotal.trim()) return null;
+    try {
+      const value = new Decimal(manualTotal);
+      return value.isPositive() ? value.toDecimalPlaces(2, Decimal.ROUND_HALF_UP) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const finalTotal = parsedManualTotal ?? autoTotal;
+  const estimatedProfit = finalTotal.minus(costTotal);
 
-  const otomatikToplam = lines.reduce((t, l) => t + price(l.p) * l.adet, 0);
-  const nihaiTutar = nihai.trim() === "" ? otomatikToplam : Number(nihai) || 0;
-  const maliyet = lines.reduce((t, l) => t + l.p.alisFiyati * l.adet, 0);
-  const tahminiKar = nihaiTutar - maliyet;
+  const createMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<SoundOffer>("/api/sound-offers", {
+        method: "POST",
+        body: JSON.stringify({
+          saleType,
+          items: lines.map((line) => ({
+            productId: line.product.id,
+            quantity: line.quantity,
+          })),
+          ...(manualTotal.trim() ? { manualTotal } : {}),
+        }),
+      }),
+    onSuccess: (offer) => {
+      void queryClient.invalidateQueries({ queryKey: ["sound-offers"] });
+      toast.success("Teklif kaydedildi; stok henüz düşülmedi");
+      if (visitId) {
+        navigate({
+          to: "/araclar/yeni",
+          search: { visitId, soundOfferId: offer.id },
+        });
+      } else {
+        navigate({ to: "/ses-sistemi/teklif-gecmisi" });
+      }
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
-  const toggle = (id: string) =>
-    setSelected((s) => {
-      const next = { ...s };
-      if (next[id] !== undefined) delete next[id];
-      else next[id] = 1;
-      return next;
-    });
-
-  const clear = () => {
-    setSelected({});
-    setNihai("");
-    setMusteri("");
-    setPlaka("");
-  };
-
-  const confirm = () => {
-    if (lines.length === 0) {
-      toast.error("En az bir ürün seçin");
+  const toggle = (product: SoundSystemProduct) => {
+    if (product.purchasePriceUsd === null) {
+      toast.error(`${product.name} için alış USD fiyatı tanımlı değil`);
       return;
     }
-    createQuote({
-      id: `q${Date.now()}`,
-      no: nextQuoteNo(),
-      tarih: new Date().toISOString().slice(0, 10),
-      musteri: musteri.trim() || "Bilinmiyor",
-      plaka: plaka.trim() || undefined,
-      satisTipi,
-      kalemler: lines.map((l) => ({
-        urunId: l.p.id,
-        urun: l.p.urun,
-        adet: l.adet,
-        birimFiyat: price(l.p),
-        alisFiyati: l.p.alisFiyati,
-      })),
-      otomatikToplam,
-      nihaiTutar,
-      tahminiKar,
-      durum: "onaylandi",
+    if (product.quantity <= 0) {
+      toast.error("Ürün stokta yok");
+      return;
+    }
+    setSelected((current) => {
+      const next = { ...current };
+      if (next[product.id] !== undefined) delete next[product.id];
+      else next[product.id] = 1;
+      return next;
     });
-    toast.success("Teklif onaylandı");
-    navigate({ to: "/ses-sistemi/teklif-gecmisi" });
   };
+
+  const customerName = visitQuery.data?.customer
+    ? [visitQuery.data.customer.firstName, visitQuery.data.customer.lastName]
+        .filter(Boolean)
+        .join(" ")
+    : "";
 
   return (
     <AppLayout title="Ses Sistemi · Teklif Ver">
-      <Link
-        to="/ses-sistemi"
-        className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Ses Sistemi
-      </Link>
+      {visitId ? (
+        <Link
+          to="/araclar/yeni"
+          search={{ visitId }}
+          className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Araç İşlemine Dön
+        </Link>
+      ) : (
+        <Link
+          to="/ses-sistemi"
+          className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Ses Sistemi
+        </Link>
+      )}
 
       <div className="card-elevated p-5">
         <div className="grid gap-4 md:grid-cols-3">
           <label className="text-sm">
             <span className="mb-1 block font-medium text-muted-foreground">Müşteri</span>
             <input
-              value={musteri}
-              onChange={(e) => setMusteri(e.target.value)}
+              readOnly
+              value={customerName}
               placeholder="Ad Soyad"
-              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary"
+              className="h-9 w-full rounded-lg border border-input bg-muted px-3 text-sm"
             />
           </label>
           <label className="text-sm">
             <span className="mb-1 block font-medium text-muted-foreground">Plaka</span>
             <input
-              value={plaka}
-              onChange={(e) => setPlaka(e.target.value)}
-              placeholder="34 ABC 123"
-              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary"
+              readOnly
+              value={visitQuery.data?.vehicle.plate ?? ""}
+              placeholder="34ABC123"
+              className="h-9 w-full rounded-lg border border-input bg-muted px-3 text-sm"
             />
           </label>
           <div className="text-sm">
             <span className="mb-1 block font-medium text-muted-foreground">Satış Tipi</span>
             <div className="flex gap-2">
-              {(["nakit", "kredi_karti"] as const).map((t) => (
+              {(["CASH", "CARD"] as const).map((type) => (
                 <button
-                  key={t}
-                  onClick={() => setSatisTipi(t)}
-                  className={`h-9 flex-1 rounded-lg border text-sm font-semibold transition-colors ${
-                    satisTipi === t
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-input bg-background text-muted-foreground hover:text-foreground"
-                  }`}
+                  type="button"
+                  key={type}
+                  onClick={() => setSaleType(type)}
+                  className={`h-9 flex-1 rounded-lg border text-sm font-semibold transition-colors ${saleType === type ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background text-muted-foreground hover:text-foreground"}`}
                 >
-                  {t === "nakit" ? "Nakit" : "Kredi Kartı"}
+                  {type === "CASH" ? "Nakit" : "Kredi Kartı"}
                 </button>
               ))}
             </div>
           </div>
+        </div>
+        <div className="mt-3 text-xs text-muted-foreground">
+          TCMB USD döviz satış kuru:{" "}
+          {rateQuery.data
+            ? `${rateQuery.data.rate} · ${rateQuery.data.effectiveDate}${rateQuery.data.isStale ? " · cache" : ""}`
+            : "Yükleniyor..."}
         </div>
       </div>
 
@@ -141,7 +224,7 @@ function TeklifVer() {
         <div className="p-5 pb-3">
           <h2 className="text-base font-bold">Ürün Seçimi</h2>
           <p className="text-xs text-muted-foreground">
-            Teklif, seçilen satış tipine göre {satisTipi === "nakit" ? "nakit" : "kredi kartı"} fiyatı ile hesaplanır.
+            Teklif kaydı stok rezervasyonu veya stok düşümü yapmaz.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -151,46 +234,90 @@ function TeklifVer() {
                 <th className="px-4 py-3 text-left font-semibold">Seç</th>
                 <th className="px-4 py-3 text-left font-semibold">Ürün Adı</th>
                 <th className="px-4 py-3 text-right font-semibold">Mevcut Stok</th>
-                <th className="px-4 py-3 text-right font-semibold">Alış Fiyatı</th>
-                <th className="px-4 py-3 text-right font-semibold">Nakit Satış</th>
-                <th className="px-4 py-3 text-right font-semibold">Kredi Kartı Satış</th>
+                <th className="px-4 py-3 text-right font-semibold">Alış USD</th>
+                <th className="px-4 py-3 text-right font-semibold">Nakit TL</th>
+                <th className="px-4 py-3 text-right font-semibold">Kart TL</th>
                 <th className="px-4 py-3 text-right font-semibold">Adet</th>
               </tr>
             </thead>
             <tbody>
-              {products.map((p) => {
-                const checked = selected[p.id] !== undefined;
+              {productsQuery.isLoading && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                    Ürünler yükleniyor...
+                  </td>
+                </tr>
+              )}
+              {productsQuery.error instanceof Error && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-destructive">
+                    {productsQuery.error.message}
+                  </td>
+                </tr>
+              )}
+              {products.map((product) => {
+                const checked = selected[product.id] !== undefined;
+                const cashPriceTry = rateQuery.data
+                  ? calculateSalePriceTry(product, exchangeRate, "CASH")
+                  : null;
+                const cardPriceTry = rateQuery.data
+                  ? calculateSalePriceTry(product, exchangeRate, "CARD")
+                  : null;
                 return (
-                  <tr key={p.id} className={`border-t border-border/60 ${checked ? "bg-primary/5" : ""}`}>
+                  <tr
+                    key={product.id}
+                    className={`border-t border-border/60 ${checked ? "bg-primary/5" : ""}`}
+                  >
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => toggle(p.id)}
+                        onChange={() => toggle(product)}
                         className="h-4 w-4 accent-primary"
-                        aria-label={`${p.urun} seç`}
                       />
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="font-semibold">{p.urun}</div>
-                      <div className="text-xs text-muted-foreground">{p.marka}</div>
+                    <td className="px-4 py-3 font-semibold">{product.name}</td>
+                    <td className="px-4 py-3 text-right">{product.quantity}</td>
+                    <td className="px-4 py-3 text-right text-muted-foreground">
+                      {product.purchasePriceUsd
+                        ? formatMoneyString(product.purchasePriceUsd, "USD")
+                        : "-"}
                     </td>
-                    <td className="px-4 py-3 text-right">{p.adet}</td>
-                    <td className="px-4 py-3 text-right text-muted-foreground">{formatTRY(p.alisFiyati)}</td>
-                    <td className={`px-4 py-3 text-right ${satisTipi === "nakit" ? "font-bold text-primary" : ""}`}>
-                      {formatTRY(p.nakitSatisFiyati)}
+                    <td
+                      className={`px-4 py-3 text-right ${saleType === "CASH" ? "font-bold text-primary" : ""}`}
+                    >
+                      {cashPriceTry
+                        ? formatMoneyString(
+                            cashPriceTry.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
+                            "TRY",
+                          )
+                        : "-"}
                     </td>
-                    <td className={`px-4 py-3 text-right ${satisTipi === "kredi_karti" ? "font-bold text-primary" : ""}`}>
-                      {formatTRY(p.kartSatisFiyati)}
+                    <td
+                      className={`px-4 py-3 text-right ${saleType === "CARD" ? "font-bold text-primary" : ""}`}
+                    >
+                      {cardPriceTry
+                        ? formatMoneyString(
+                            cardPriceTry.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2),
+                            "TRY",
+                          )
+                        : "-"}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <input
                         type="number"
                         min={1}
+                        max={product.quantity}
                         disabled={!checked}
-                        value={checked ? selected[p.id] : ""}
-                        onChange={(e) =>
-                          setSelected((s) => ({ ...s, [p.id]: Math.max(1, Number(e.target.value) || 1) }))
+                        value={checked ? selected[product.id] : ""}
+                        onChange={(event) =>
+                          setSelected((current) => ({
+                            ...current,
+                            [product.id]: Math.min(
+                              product.quantity,
+                              Math.max(1, Number(event.target.value) || 1),
+                            ),
+                          }))
                         }
                         className="h-9 w-20 rounded-lg border border-input bg-background px-2 text-right text-sm outline-none focus:border-primary disabled:opacity-40"
                       />
@@ -206,49 +333,61 @@ function TeklifVer() {
       <div className="mt-6 card-elevated p-5">
         <div className="grid gap-4 md:grid-cols-4">
           <div>
-            <div className="text-xs font-semibold uppercase text-muted-foreground">Seçilen Ürün</div>
+            <div className="text-xs font-semibold uppercase text-muted-foreground">
+              Seçilen Ürün
+            </div>
             <div className="mt-1 text-2xl font-bold">{lines.length}</div>
           </div>
           <div>
-            <div className="text-xs font-semibold uppercase text-muted-foreground">Otomatik Toplam</div>
-            <div className="mt-1 text-2xl font-bold">{formatTRY(otomatikToplam)}</div>
+            <div className="text-xs font-semibold uppercase text-muted-foreground">
+              Otomatik Toplam
+            </div>
+            <div className="mt-1 text-2xl font-bold">
+              {formatMoneyString(autoTotal.toFixed(2), "TRY")}
+            </div>
           </div>
           <div>
-            <div className="text-xs font-semibold uppercase text-muted-foreground">Nihai Teklif Tutarı</div>
+            <div className="text-xs font-semibold uppercase text-muted-foreground">
+              Nihai Teklif Tutarı
+            </div>
             <input
               type="number"
-              value={nihai}
-              onChange={(e) => setNihai(e.target.value)}
-              placeholder={String(otomatikToplam)}
+              min="0.01"
+              step="0.01"
+              value={manualTotal}
+              onChange={(e) => setManualTotal(e.target.value)}
+              placeholder={autoTotal.toFixed(2)}
               className="mt-1 h-10 w-full rounded-lg border border-input bg-background px-3 text-lg font-bold outline-none focus:border-primary"
             />
           </div>
           <div>
             <div className="text-xs font-semibold uppercase text-muted-foreground">Tahmini Kâr</div>
-            <div className={`mt-1 text-2xl font-bold ${tahminiKar >= 0 ? "text-success" : "text-destructive"}`}>
-              {formatTRY(tahminiKar)}
+            <div
+              className={`mt-1 text-2xl font-bold ${estimatedProfit.isNegative() ? "text-destructive" : "text-success"}`}
+            >
+              {formatMoneyString(estimatedProfit.toFixed(2), "TRY")}
             </div>
           </div>
         </div>
 
         <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <Link
-            to="/ses-sistemi"
-            className="inline-flex h-9 items-center rounded-lg border border-input bg-background px-4 text-sm font-semibold hover:bg-accent"
-          >
-            İptal
-          </Link>
           <button
-            onClick={clear}
+            type="button"
+            onClick={() => {
+              setSelected({});
+              setManualTotal("");
+            }}
             className="h-9 rounded-lg border border-input bg-background px-4 text-sm font-semibold hover:bg-accent"
           >
             Temizle
           </button>
           <button
-            onClick={confirm}
-            className="h-9 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            type="button"
+            disabled={createMutation.isPending || lines.length === 0 || !rateQuery.data}
+            onClick={() => createMutation.mutate()}
+            className="h-9 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            Teklifi Onayla
+            {createMutation.isPending ? "Kaydediliyor..." : "Teklifi Onayla"}
           </button>
         </div>
       </div>
