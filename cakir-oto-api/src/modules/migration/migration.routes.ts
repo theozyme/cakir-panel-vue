@@ -3,6 +3,7 @@ import { Router, raw } from "express";
 import {
   dryRunMultimediaStockMigration,
   dryRunScreenStockMigration,
+  dryRunSpecialPaymentsMigration,
   dryRunSoundOffersMigration,
   dryRunSoundStockMigration,
   dryRunSupplierTransactionsMigration,
@@ -12,6 +13,7 @@ import {
   getSuppliers,
   importMultimediaStockMigration,
   importScreenStockMigration,
+  importSpecialPaymentsMigration,
   importSoundOffersMigration,
   importSoundStockMigration,
   importSupplierTransactionsMigration,
@@ -41,3 +43,5 @@ migrationRouter.post("/supplier-transactions/dry-run", dryRunSupplierTransaction
 migrationRouter.post("/supplier-transactions/import", importSupplierTransactionsMigration);
 migrationRouter.post("/vehicle-history/dry-run", zipUpload, dryRunVehicleHistoryMigration);
 migrationRouter.post("/vehicle-history/import", zipUpload, importVehicleHistoryMigration);
+migrationRouter.post("/special-payments/dry-run", zipUpload, dryRunSpecialPaymentsMigration);
+migrationRouter.post("/special-payments/import", zipUpload, importSpecialPaymentsMigration);

@@ -18,6 +18,10 @@ import {
   runSuppliersDryRun,
   runVehicleHistoryDryRun,
 } from "./migration.service.js";
+import {
+  importSpecialPayments,
+  runSpecialPaymentsDryRun,
+} from "./special-payments-migration.service.js";
 
 export const getMigrationStatus = (_req: Request, res: Response) => {
   res.json(getMigrationModuleStatus());
@@ -194,6 +198,30 @@ export const importVehicleHistoryMigration = async (
 ) => {
   try {
     res.json(await importVehicleHistory(req.body as Buffer));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const dryRunSpecialPaymentsMigration = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    res.json(await runSpecialPaymentsDryRun(req.body as Buffer));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const importSpecialPaymentsMigration = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    res.json(await importSpecialPayments(req.body as Buffer));
   } catch (error) {
     next(error);
   }

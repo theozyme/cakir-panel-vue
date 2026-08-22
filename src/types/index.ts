@@ -50,21 +50,3 @@ export interface WholesalerMovement {
   tutar: number;
   paraBirimi: "TRY" | "USD";
 }
-
-export type PaymentCategory =
-  | "personel"
-  | "gider"
-  | "fatura"
-  | "kredi"
-  | "sgk_vergi"
-  | "yemek"
-  | "ozel";
-
-export interface SpecialPayment {
-  id: string;
-  kategori: PaymentCategory;
-  baslik: string;
-  tutar: number;
-  tarih: string;
-  not?: string;
-}

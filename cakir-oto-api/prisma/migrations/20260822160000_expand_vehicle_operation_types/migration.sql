@@ -1,0 +1,15 @@
+-- AlterEnum
+ALTER TYPE "VehicleOperationType" ADD VALUE 'HIDDEN_FEATURE_ACTIVATION';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'REAR_VIEW_CAMERA';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'ANDROID_BOX';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'DASH_CAMERA';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'BULB';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'LED_XENON';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'BATTERY';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'WIPER';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'LABOR';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'CAR_STEREO';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'STEERING_WHEEL_COVER';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'WINDOW_FILM';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'PPF_COATING';
+ALTER TYPE "VehicleOperationType" ADD VALUE 'POWER_TAILGATE';

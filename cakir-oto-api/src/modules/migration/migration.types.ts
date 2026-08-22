@@ -316,6 +316,41 @@ export type SupplierTransactionImportResponse = ScreenStockImportResponse;
 
 export type VehicleHistoryImportResponse = ScreenStockImportResponse;
 
+export type SpecialPaymentMigrationPreviewItem = {
+  file: string;
+  section: string;
+  masterName: string | null;
+  date: string | null;
+  amount: string | null;
+  description: string | null;
+  status: "NEW" | "EXISTING" | "SKIPPED" | "ERROR";
+};
+
+export type SpecialPaymentsDryRunResponse = {
+  totalFiles: number;
+  validFiles: number;
+  invalidFiles: number;
+  personnelPayments: number;
+  loanPayments: number;
+  invoicePayments: number;
+  expenseRecords: number;
+  sgkRecords: number;
+  mealRecords: number;
+  skippedCustomRecords: number;
+  warnings: string[];
+  errors: MigrationRowError[];
+  preview: SpecialPaymentMigrationPreviewItem[];
+};
+
+export type SpecialPaymentsImportResponse = {
+  batchId: string;
+  batchIds: string[];
+  total: number;
+  success: number;
+  skipped: number;
+  error: number;
+};
+
 export type SupplierListItem = {
   id: string;
   name: string;

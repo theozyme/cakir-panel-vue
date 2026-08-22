@@ -154,6 +154,16 @@ type VehicleHistoryPreviewItem = {
   status: "NEW" | "EXISTING" | "INVALID";
 };
 
+type SpecialPaymentPreviewItem = {
+  file: string;
+  section: string;
+  masterName: string | null;
+  date: string | null;
+  amount: string | null;
+  description: string | null;
+  status: "NEW" | "EXISTING" | "SKIPPED" | "ERROR";
+};
+
 type DryRunResponse = {
   total?: number;
   valid?: number;
@@ -168,6 +178,13 @@ type DryRunResponse = {
   existingVehicles?: number;
   totalVisits?: number;
   totalOperations?: number;
+  personnelPayments?: number;
+  loanPayments?: number;
+  invoicePayments?: number;
+  expenseRecords?: number;
+  sgkRecords?: number;
+  mealRecords?: number;
+  skippedCustomRecords?: number;
   errors: MigrationError[];
   warnings?: DryRunWarning[];
   preview: Array<
@@ -178,6 +195,7 @@ type DryRunResponse = {
     | SupplierPreviewItem
     | SupplierTransactionPreviewItem
     | VehicleHistoryPreviewItem
+    | SpecialPaymentPreviewItem
   >;
 };
 
@@ -260,6 +278,13 @@ const migrationTypes = [
     dryRunPath: "/api/admin/migration/vehicle-history/dry-run",
     importPath: "/api/admin/migration/vehicle-history/import",
   },
+  {
+    value: "special-payments",
+    label: "Özel Ödemeler",
+    fileHint: "owner_master.json ve owner_YYYY-MM.json içeren ZIP",
+    dryRunPath: "/api/admin/migration/special-payments/dry-run",
+    importPath: "/api/admin/migration/special-payments/import",
+  },
 ] as const;
 type MigrationType = (typeof migrationTypes)[number]["value"];
 const apiBaseUrl = import.meta.env.VITE_API_URL;
@@ -272,7 +297,7 @@ const formatBytes = (bytes: number) => {
 };
 
 const readJsonFile = async (file: File, type: MigrationType): Promise<SelectedFile> => {
-  if (type === "vehicle-history") {
+  if (type === "vehicle-history" || type === "special-payments") {
     return {
       name: file.name,
       size: file.size,
@@ -377,6 +402,10 @@ const isVehicleHistoryPreviewItem = (
   row: DryRunResponse["preview"][number],
 ): row is VehicleHistoryPreviewItem => "operationCount" in row && "plate" in row;
 
+const isSpecialPaymentPreviewItem = (
+  row: DryRunResponse["preview"][number],
+): row is SpecialPaymentPreviewItem => "section" in row && "masterName" in row;
+
 const isScreenPreviewItem = (
   row: DryRunResponse["preview"][number],
 ): row is ScreenStockPreviewItem =>
@@ -385,7 +414,8 @@ const isScreenPreviewItem = (
   !isSoundOfferPreviewItem(row) &&
   !isSupplierPreviewItem(row) &&
   !isSupplierTransactionPreviewItem(row) &&
-  !isVehicleHistoryPreviewItem(row);
+  !isVehicleHistoryPreviewItem(row) &&
+  !isSpecialPaymentPreviewItem(row);
 
 const isMigrationWarning = (warning: DryRunWarning): warning is MigrationWarning =>
   typeof warning !== "string";
@@ -407,10 +437,12 @@ function AdminMigrationPage() {
   const selectedMigration = getMigrationConfig(selectedType);
   const requiresSupplier = selectedType === "supplier-transactions";
   const isVehicleHistory = selectedType === "vehicle-history";
+  const isSpecialPayments = selectedType === "special-payments";
+  const usesZip = isVehicleHistory || isSpecialPayments;
   const canImport = Boolean(file && dryRunResult && !isBusy && (!requiresSupplier || selectedSupplierId));
   const previewRows = useMemo(() => dryRunResult?.preview.slice(0, 50) ?? [], [dryRunResult]);
   const selectedFileRowCount = file
-    ? isVehicleHistory
+    ? usesZip
       ? null
       : Array.isArray(file.rows)
       ? file.rows.length
@@ -467,7 +499,7 @@ function AdminMigrationPage() {
   const handleFile = async (nextFile?: File) => {
     if (!nextFile) return;
 
-    const expectedExtension = isVehicleHistory ? ".zip" : ".json";
+    const expectedExtension = usesZip ? ".zip" : ".json";
 
     if (!nextFile.name.toLowerCase().endsWith(expectedExtension)) {
       toast.error(`Lütfen ${expectedExtension} uzantılı bir dosya seçin.`);
@@ -481,7 +513,7 @@ function AdminMigrationPage() {
     try {
       const parsedFile = await readJsonFile(nextFile, selectedType);
       setFile(parsedFile);
-      toast.success(isVehicleHistory ? "ZIP dosyası hazır." : "JSON dosyası okundu.");
+      toast.success(usesZip ? "ZIP dosyası hazır." : "JSON dosyası okundu.");
     } catch (error) {
       setFile(null);
       toast.error(error instanceof Error ? error.message : "JSON dosyası okunamadı.");
@@ -517,7 +549,7 @@ function AdminMigrationPage() {
           }
         : file.rows;
       const result =
-        isVehicleHistory && file.rawFile
+        usesZip && file.rawFile
           ? await postZipMigration<DryRunResponse>(selectedMigration.dryRunPath, file.rawFile)
           : await postMigration<DryRunResponse>(selectedMigration.dryRunPath, payload);
       setDryRunResult(result);
@@ -548,7 +580,7 @@ function AdminMigrationPage() {
           }
         : file.rows;
       const result =
-        isVehicleHistory && file.rawFile
+        usesZip && file.rawFile
           ? await postZipMigration<ImportResponse>(selectedMigration.importPath, file.rawFile)
           : await postMigration<ImportResponse>(selectedMigration.importPath, payload);
       setImportResult(result);
@@ -615,7 +647,7 @@ function AdminMigrationPage() {
             <input
               ref={inputRef}
               type="file"
-              accept={isVehicleHistory ? ".zip,application/zip" : ".json,application/json"}
+              accept={usesZip ? ".zip,application/zip" : ".json,application/json"}
               className="hidden"
               onChange={(event) => void handleFile(event.target.files?.[0])}
             />
@@ -625,7 +657,7 @@ function AdminMigrationPage() {
               <UploadCloud className="h-8 w-8 text-primary" />
             )}
             <div className="mt-3 text-sm font-semibold">
-              {isVehicleHistory ? "ZIP dosyası seç" : "JSON dosyası seç"}
+              {usesZip ? "ZIP dosyası seç" : "JSON dosyası seç"}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">{selectedMigration.fileHint}</div>
           </div>
@@ -668,7 +700,26 @@ function AdminMigrationPage() {
         <div className="space-y-4">
           {dryRunResult && (
             <>
-              {isVehicleHistory ? (
+              {isSpecialPayments ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <ResultCard label="Dosya" value={dryRunResult.totalFiles ?? 0} />
+                  <ResultCard label="Geçerli Dosya" value={dryRunResult.validFiles ?? 0} tone="success" />
+                  <ResultCard label="Hatalı Dosya" value={dryRunResult.invalidFiles ?? 0} tone="destructive" />
+                  <ResultCard label="Personel Ödemesi" value={dryRunResult.personnelPayments ?? 0} />
+                  <ResultCard label="Kredi Ödemesi" value={dryRunResult.loanPayments ?? 0} />
+                  <ResultCard label="Fatura Ödemesi" value={dryRunResult.invoicePayments ?? 0} />
+                  <ResultCard label="Gider Kaydı" value={dryRunResult.expenseRecords ?? 0} />
+                  <ResultCard label="SGK Kaydı" value={dryRunResult.sgkRecords ?? 0} />
+                  <ResultCard label="Yemek Kaydı" value={dryRunResult.mealRecords ?? 0} />
+                  <ResultCard
+                    label="Atlanan CUSTOM"
+                    value={dryRunResult.skippedCustomRecords ?? 0}
+                    tone="warning"
+                  />
+                  <ResultCard label="Uyarı" value={dryRunResult.warnings?.length ?? 0} tone="warning" />
+                  <ResultCard label="Hata" value={dryRunResult.errors.length} tone="destructive" />
+                </div>
+              ) : isVehicleHistory ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <ResultCard label="Dosya" value={dryRunResult.totalFiles ?? 0} />
                   <ResultCard label="Geçerli Dosya" value={dryRunResult.validFiles ?? 0} tone="success" />
@@ -776,6 +827,60 @@ function AdminMigrationPage() {
                             )}
                           </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {previewRows.length > 0 && selectedType === "special-payments" && (
+                <div className="card-elevated p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-success" />
+                    <h2 className="text-base font-bold">Önizleme</h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Dosya</th>
+                          <th className="px-4 py-3 text-left font-semibold">Bölüm</th>
+                          <th className="px-4 py-3 text-left font-semibold">Master/Kategori</th>
+                          <th className="px-4 py-3 text-left font-semibold">Tarih</th>
+                          <th className="px-4 py-3 text-right font-semibold">Tutar</th>
+                          <th className="px-4 py-3 text-left font-semibold">Açıklama</th>
+                          <th className="px-4 py-3 text-left font-semibold">Durum</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewRows.map((row, index) => {
+                          if (!isSpecialPaymentPreviewItem(row)) return null;
+
+                          const tone =
+                            row.status === "ERROR"
+                              ? "bg-destructive/15 text-destructive"
+                              : row.status === "NEW"
+                                ? "bg-success/15 text-success"
+                                : "bg-warning/15 text-warning";
+                          return (
+                            <tr
+                              key={`${row.file}-${row.section}-${row.date ?? "empty"}-${index}`}
+                              className="border-t border-border/60 hover:bg-muted/30"
+                            >
+                              <td className="px-4 py-3 text-muted-foreground">{row.file}</td>
+                              <td className="px-4 py-3 font-semibold">{row.section}</td>
+                              <td className="px-4 py-3">{row.masterName ?? "-"}</td>
+                              <td className="px-4 py-3">{row.date ?? "-"}</td>
+                              <td className="px-4 py-3 text-right font-bold">{row.amount ?? "-"}</td>
+                              <td className="px-4 py-3">{row.description ?? "-"}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>
+                                  {row.status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

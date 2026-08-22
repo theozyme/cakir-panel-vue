@@ -7,8 +7,6 @@ import {
   Car,
   ListChecks,
   TrendingUp,
-  AlertCircle,
-  Wrench,
   PackageX,
   Plus,
   ArrowRight,
@@ -190,15 +188,13 @@ function Dashboard() {
   const bugun = dailyData?.summary.totalVehicles ?? 0;
   const totalOperationsValue = dailyLoading ? "-" : (dailyData?.summary.totalOperations ?? 0);
   const dailyEarningsValue = dailyLoading ? "-" : formatTotals(dailyData?.summary.totalsByCurrency);
-  const acikAlacak = 78500;
-  const servisteki = 3;
   const kritikStok = criticalStockQueries.some((query) => query.isLoading)
     ? "-"
     : criticalStockQueries.reduce((total, query) => total + (query.data?.total ?? 0), 0);
 
   return (
     <AppLayout title="Ana Sayfa">
-      <section aria-label="Günlük özet" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Günlük özet" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <DashboardMetric
           label="Bekleyen Araç"
           value={bekleyen}
@@ -223,24 +219,15 @@ function Dashboard() {
           tone="success"
         />
         <DashboardMetric
-          label="Açık Alacak"
-          value={formatTRY(acikAlacak)}
-          icon={<AlertCircle className="h-5 w-5" />}
-          tone="destructive"
-        />
-        <DashboardMetric
-          label="Servisteki Araç"
-          value={servisteki}
-          icon={<Wrench className="h-5 w-5" />}
-          tone="primary"
-        />
-        <DashboardMetric
           label="Kritik Stok"
           value={kritikStok}
           icon={<PackageX className="h-5 w-5" />}
           tone="destructive"
           hint="Stoğu eşik altında"
         />
+      </section>
+
+      <section aria-label="Operasyon takibi" className="mt-5 grid gap-4 xl:grid-cols-2">
         <div className="flex min-w-0 flex-col justify-center rounded-xl border border-primary/20 bg-primary/[0.035] px-4 py-3.5">
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -280,88 +267,6 @@ function Dashboard() {
             </button>
           </form>
         </div>
-      </section>
-
-      <section aria-label="Finansal özet" className="mt-5 grid gap-4 xl:grid-cols-3">
-        <div className="card-elevated p-4 xl:col-span-2 md:p-5">
-          <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-3">
-            <h2 className="text-base font-bold">Günlük Kazanç</h2>
-            <span className="text-xs text-muted-foreground">Son 7 gün</span>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyEarnings}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="gun"
-                  stroke="var(--color-muted-foreground)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="var(--color-muted-foreground)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => `${v / 1000}k`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 8,
-                  }}
-                  formatter={(v: number) => formatTRY(v)}
-                />
-                <Bar dataKey="kazanc" fill="var(--color-primary)" radius={[5, 5, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="card-elevated p-4 md:p-5">
-          <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-3">
-            <h2 className="text-base font-bold">Ödeme Dağılımı</h2>
-            <span className="text-xs text-muted-foreground">Bu ay</span>
-          </div>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={paymentDistribution}
-                  dataKey="value"
-                  innerRadius={45}
-                  outerRadius={75}
-                  paddingAngle={3}
-                >
-                  {paymentDistribution.map((p, i) => (
-                    <Cell key={i} fill={p.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => formatTRY(v)} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-1 space-y-2 border-t border-border/70 pt-3">
-            {paymentDistribution.map((p) => (
-              <div key={p.name} className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} />
-                  {p.name}
-                </span>
-                <span className="font-semibold">{formatTRY(p.value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section aria-label="Operasyon takibi" className="mt-5 grid gap-4 xl:grid-cols-2">
         <div className="card-elevated p-4 md:p-5">
           <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-3">
             <h2 className="text-base font-bold">Bekleyen Araçlar</h2>
@@ -411,7 +316,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="card-elevated overflow-hidden">
+        <div className="card-elevated overflow-hidden xl:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 p-4 pb-3 md:p-5 md:pb-3">
             <div>
               <h2 className="text-base font-bold">Günlük Araç İşlemleri</h2>
@@ -559,6 +464,85 @@ function Dashboard() {
                   })}
               </tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="Finansal özet" className="mt-5 grid gap-4 xl:grid-cols-2">
+        <div className="card-elevated p-4 md:p-5">
+          <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-3">
+            <h2 className="text-base font-bold">Günlük Kazanç</h2>
+            <span className="text-xs text-muted-foreground">Son 7 gün</span>
+          </div>
+          <div className="h-40">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dailyEarnings}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="gun"
+                  stroke="var(--color-muted-foreground)"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke="var(--color-muted-foreground)"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `${v / 1000}k`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8,
+                  }}
+                  formatter={(v: number) => formatTRY(v)}
+                />
+                <Bar dataKey="kazanc" fill="var(--color-primary)" radius={[5, 5, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="card-elevated p-4 md:p-5">
+          <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-3">
+            <h2 className="text-base font-bold">Ödeme Dağılımı</h2>
+            <span className="text-xs text-muted-foreground">Bu ay</span>
+          </div>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={paymentDistribution}
+                  dataKey="value"
+                  innerRadius={45}
+                  outerRadius={75}
+                  paddingAngle={3}
+                >
+                  {paymentDistribution.map((p, i) => (
+                    <Cell key={i} fill={p.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: number) => formatTRY(v)} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-1 space-y-2 border-t border-border/70 pt-3">
+            {paymentDistribution.map((p) => (
+              <div key={p.name} className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} />
+                  {p.name}
+                </span>
+                <span className="font-semibold">{formatTRY(p.value)}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>

@@ -174,7 +174,26 @@ export type SoundOffer = {
   }>;
 };
 
-export type OperationType = "MULTIMEDIA" | "SOUND_SYSTEM" | "SERVICE" | "ACCESSORY" | "OTHER";
+export type OperationType =
+  | "MULTIMEDIA"
+  | "SOUND_SYSTEM"
+  | "HIDDEN_FEATURE_ACTIVATION"
+  | "REAR_VIEW_CAMERA"
+  | "ANDROID_BOX"
+  | "DASH_CAMERA"
+  | "BULB"
+  | "LED_XENON"
+  | "BATTERY"
+  | "WIPER"
+  | "LABOR"
+  | "CAR_STEREO"
+  | "STEERING_WHEEL_COVER"
+  | "WINDOW_FILM"
+  | "PPF_COATING"
+  | "POWER_TAILGATE"
+  | "SERVICE"
+  | "ACCESSORY"
+  | "OTHER";
 export type PaymentMethod = "CASH" | "CREDIT_CARD" | "BANK_TRANSFER" | "MAIL_ORDER";
 
 export type VehicleOperationHistoryItem = {

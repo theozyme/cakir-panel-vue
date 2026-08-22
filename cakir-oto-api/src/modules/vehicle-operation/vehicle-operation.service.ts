@@ -20,7 +20,27 @@ import type {
   VehicleOperationVisitItem,
 } from "./vehicle-operation.types.js";
 
-const operationTypes = ["MULTIMEDIA", "SOUND_SYSTEM", "SERVICE", "ACCESSORY", "OTHER"] as const;
+const operationTypes = [
+  "MULTIMEDIA",
+  "SOUND_SYSTEM",
+  "HIDDEN_FEATURE_ACTIVATION",
+  "REAR_VIEW_CAMERA",
+  "ANDROID_BOX",
+  "DASH_CAMERA",
+  "BULB",
+  "LED_XENON",
+  "BATTERY",
+  "WIPER",
+  "LABOR",
+  "CAR_STEREO",
+  "STEERING_WHEEL_COVER",
+  "WINDOW_FILM",
+  "PPF_COATING",
+  "POWER_TAILGATE",
+  "SERVICE",
+  "ACCESSORY",
+  "OTHER",
+] as const;
 const paymentMethods = ["CASH", "CREDIT_CARD", "BANK_TRANSFER", "MAIL_ORDER"] as const;
 const currencies = ["TRY", "USD"] as const;
 

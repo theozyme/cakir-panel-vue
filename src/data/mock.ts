@@ -3,7 +3,6 @@ import type {
   Operation,
   Wholesaler,
   WholesalerMovement,
-  SpecialPayment,
 } from "@/types";
 
 export const mockVehicles: Vehicle[] = [
@@ -40,20 +39,6 @@ export const mockMovements: WholesalerMovement[] = [
   { id: "m6", toptanciId: "w3", tarih: "2026-07-10", tur: "mal_giris", aciklama: "Import - konteyner", tutar: 6500, paraBirimi: "USD" },
 ];
 
-export const mockSpecialPayments: SpecialPayment[] = [
-  { id: "p1", kategori: "personel", baslik: "Usta Hasan - Maaş", tutar: 32000, tarih: "2026-07-01" },
-  { id: "p2", kategori: "personel", baslik: "Çırak Mehmet - Maaş", tutar: 18000, tarih: "2026-07-01" },
-  { id: "p3", kategori: "fatura", baslik: "Elektrik", tutar: 4200, tarih: "2026-07-15" },
-  { id: "p4", kategori: "fatura", baslik: "Su", tutar: 850, tarih: "2026-07-15" },
-  { id: "p5", kategori: "fatura", baslik: "İnternet", tutar: 1100, tarih: "2026-07-10" },
-  { id: "p6", kategori: "kredi", baslik: "İşyeri Kredisi", tutar: 12500, tarih: "2026-07-05" },
-  { id: "p7", kategori: "sgk_vergi", baslik: "SGK Primleri", tutar: 9800, tarih: "2026-07-25" },
-  { id: "p8", kategori: "sgk_vergi", baslik: "KDV", tutar: 15400, tarih: "2026-07-25" },
-  { id: "p9", kategori: "yemek", baslik: "Öğle yemekleri", tutar: 3200, tarih: "2026-07-20" },
-  { id: "p10", kategori: "gider", baslik: "Temizlik malzemeleri", tutar: 680, tarih: "2026-07-12" },
-  { id: "p11", kategori: "ozel", baslik: "Reklam - sosyal medya", tutar: 2500, tarih: "2026-07-18" },
-];
-
 export const dailyEarnings = [
   { gun: "Pzt", kazanc: 12400 },
   { gun: "Sal", kazanc: 18200 },
@@ -62,16 +47,6 @@ export const dailyEarnings = [
   { gun: "Cum", kazanc: 27300 },
   { gun: "Cmt", kazanc: 31200 },
   { gun: "Paz", kazanc: 8400 },
-];
-
-export const monthlyRevenue = [
-  { ay: "Oca", gelir: 285000, gider: 165000 },
-  { ay: "Şub", gelir: 312000, gider: 178000 },
-  { ay: "Mar", gelir: 356000, gider: 192000 },
-  { ay: "Nis", gelir: 298000, gider: 172000 },
-  { ay: "May", gelir: 402000, gider: 215000 },
-  { ay: "Haz", gelir: 445000, gider: 228000 },
-  { ay: "Tem", gelir: 468000, gider: 241000 },
 ];
 
 export const wholesalers = mockWholesalers;
