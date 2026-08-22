@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, Fragment, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Clock,
@@ -29,7 +29,7 @@ import {
 } from "recharts";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { formatTRY } from "@/components/shared/StatusBadge";
-import { mockStock, dailyEarnings } from "@/data/mock";
+import { dailyEarnings } from "@/data/mock";
 import { apiRequest } from "@/lib/api";
 import { formatMoneyString } from "@/lib/money";
 import type {
@@ -38,6 +38,7 @@ import type {
   DailyVehicleVisit,
   PendingVehicle,
 } from "@/types/business";
+import type { InventoryListResponse, InventoryStockType } from "@/types/inventory";
 
 interface DashboardMetricProps {
   label: string;
@@ -147,6 +148,15 @@ function Dashboard() {
     queryFn: () =>
       apiRequest<DailyVehicleOperationResponse>(`/api/vehicle-operations?date=${selectedDate}`),
   });
+  const criticalStockQueries = useQueries({
+    queries: (["MULTIMEDIA", "SCREEN", "SOUND_SYSTEM"] as InventoryStockType[]).map((type) => ({
+      queryKey: ["inventory", "dashboard-critical", type],
+      queryFn: () =>
+        apiRequest<InventoryListResponse>(
+          `/api/inventory/products?type=${type}&active=true&criticalOnly=true&page=1&pageSize=1`,
+        ),
+    })),
+  });
   const createPendingMutation = useMutation({
     mutationFn: (plate: string) =>
       apiRequest<PendingVehicle>("/api/pending-vehicles", {
@@ -182,7 +192,9 @@ function Dashboard() {
   const dailyEarningsValue = dailyLoading ? "-" : formatTotals(dailyData?.summary.totalsByCurrency);
   const acikAlacak = 78500;
   const servisteki = 3;
-  const kritikStok = mockStock.filter((s) => s.adet <= s.kritikSeviye).length;
+  const kritikStok = criticalStockQueries.some((query) => query.isLoading)
+    ? "-"
+    : criticalStockQueries.reduce((total, query) => total + (query.data?.total ?? 0), 0);
 
   return (
     <AppLayout title="Ana Sayfa">

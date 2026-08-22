@@ -1,99 +1,89 @@
-import type { StockItem } from "@/types";
+import type { InventoryStockType } from "@/types/inventory";
 
-export type StockCategory = StockItem["kategori"];
+export type OrderStatus = "DRAFT" | "ORDERED" | "RECEIVED" | "CANCELLED";
+export type OrderPaymentStatus = "UNPAID" | "PARTIAL" | "PAID";
+export type OrderPaymentMethod =
+  | "CASH"
+  | "CREDIT_CARD"
+  | "BANK_TRANSFER"
+  | "CHECK"
+  | "TERM";
 
-export type OrderStatus =
-  | "taslak"
-  | "verildi"
-  | "hazirlaniyor"
-  | "kargoda"
-  | "kismi_teslim"
-  | "teslim_edildi"
-  | "iptal";
-
-export type OrderPaymentStatus = "odenmedi" | "kismi" | "odendi";
-
-export type OrderPaymentMethod = "nakit" | "kart" | "havale" | "cek" | "vadeli";
-
-export interface Supplier {
+export type Supplier = {
   id: string;
-  ad: string;
-  paraBirimi: "TRY" | "USD";
-}
+  name: string;
+  currency: "TRY" | "USD";
+};
 
-export interface OrderItem {
-  stokId: string;
-  urun: string;
-  kod: string;
-  adet: number;
-  birimFiyat: number;
-  teslimEdilen: number;
-}
-
-export interface OrderHistoryEntry {
-  tarih: string;
-  durum: OrderStatus;
-  aciklama: string;
-}
-
-export interface OrderPayment {
-  tarih: string;
-  tutar: number;
-  yontem: OrderPaymentMethod;
-}
-
-export interface PurchaseOrder {
+export type StockOrderItem = {
   id: string;
-  no: string;
-  tarih: string;
-  beklenenTeslim: string;
-  tedarikciId: string;
-  tedarikciAd: string;
-  stokTuru: StockCategory;
-  paraBirimi: "TRY" | "USD";
-  notu?: string;
-  odemeDurumu: OrderPaymentStatus;
-  odemeYontemi: OrderPaymentMethod;
-  durum: OrderStatus;
-  kalemler: OrderItem[];
-  gecmis: OrderHistoryEntry[];
-  odemeler: OrderPayment[];
-}
+  stockType: InventoryStockType;
+  productId: string | null;
+  isNewProduct: boolean;
+  productSnapshot: Record<string, unknown>;
+  productLabel: string;
+  productCode: string | null;
+  quantity: number;
+  unitPrice: string;
+  totalPrice: string;
+};
+
+export type StockOrder = {
+  id: string;
+  supplier: Supplier;
+  currency: "TRY" | "USD";
+  orderDate: string;
+  expectedDeliveryDate: string;
+  paymentStatus: OrderPaymentStatus;
+  paymentMethod: OrderPaymentMethod;
+  note: string | null;
+  status: OrderStatus;
+  receivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  productKinds: number;
+  totalQuantity: number;
+  totalAmount: string;
+  stockTypes: InventoryStockType[];
+  items: StockOrderItem[];
+};
+
+export type StockOrderListResponse = {
+  items: StockOrder[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type StockOrderItemInput = {
+  key: string;
+  stockType: InventoryStockType;
+  isNewProduct: boolean;
+  productId?: string;
+  productSnapshot?: Record<string, unknown>;
+  productLabel: string;
+  productCode: string | null;
+  quantity: number;
+  unitPrice: string;
+};
 
 export const orderStatusLabels: Record<OrderStatus, string> = {
-  taslak: "Taslak",
-  verildi: "Sipariş Verildi",
-  hazirlaniyor: "Hazırlanıyor",
-  kargoda: "Kargoda",
-  kismi_teslim: "Kısmi Teslim",
-  teslim_edildi: "Teslim Edildi",
-  iptal: "İptal",
+  DRAFT: "Taslak",
+  ORDERED: "Sipariş Verildi",
+  RECEIVED: "Teslim Alındı",
+  CANCELLED: "İptal",
 };
 
 export const paymentStatusLabels: Record<OrderPaymentStatus, string> = {
-  odenmedi: "Ödenmedi",
-  kismi: "Kısmi Ödendi",
-  odendi: "Ödendi",
+  UNPAID: "Ödenmedi",
+  PARTIAL: "Kısmi Ödendi",
+  PAID: "Ödendi",
 };
 
 export const paymentMethodLabels: Record<OrderPaymentMethod, string> = {
-  nakit: "Nakit",
-  kart: "Kredi Kartı",
-  havale: "Havale / EFT",
-  cek: "Çek",
-  vadeli: "Vadeli",
+  CASH: "Nakit",
+  CREDIT_CARD: "Kredi Kartı",
+  BANK_TRANSFER: "Havale / EFT",
+  CHECK: "Çek",
+  TERM: "Vadeli",
 };
-
-export const stockCategoryLabels: Record<StockCategory, string> = {
-  multimedya: "Multimedya",
-  ekran: "Ekran",
-  ses_sistemi: "Ses Sistemi",
-};
-
-export function orderTotal(o: PurchaseOrder) {
-  return o.kalemler.reduce((t, k) => t + k.adet * k.birimFiyat, 0);
-}
-
-export function orderQty(o: PurchaseOrder) {
-  return o.kalemler.reduce((t, k) => t + k.adet, 0);
-}

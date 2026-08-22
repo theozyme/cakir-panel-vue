@@ -60,6 +60,27 @@ enum StockMovementType {
   MANUAL_CORRECTION
 }
 
+enum StockOrderStatus {
+  DRAFT
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+enum StockOrderPaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum StockOrderPaymentMethod {
+  CASH
+  CREDIT_CARD
+  BANK_TRANSFER
+  CHECK
+  TERM
+}
+
 enum ExpenseCategoryType {
   GENERAL
   SGK
@@ -159,17 +180,20 @@ model VehicleOperation {
 }
 
 model MultimediaProduct {
-  id        String   @id @default(uuid())
-  code      String   @db.VarChar(100)
-  forx      String?  @db.VarChar(100)
-  model     String?  @db.VarChar(150)
-  brand     String?  @db.VarChar(100)
-  shelf     String?  @db.VarChar(30)
-  quantity  Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  code               String   @db.VarChar(100)
+  forx               String?  @db.VarChar(100)
+  model              String?  @db.VarChar(150)
+  brand              String?  @db.VarChar(100)
+  shelf              String?  @db.VarChar(30)
+  quantity           Int      @default(0)
+  criticalStockLevel Int      @default(0) @map("critical_stock_level")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
-  operations VehicleOperation[]
+  operations      VehicleOperation[]
+  stockOrderItems StockOrderItem[]
 
   @@index([code])
   @@index([brand])
@@ -177,18 +201,21 @@ model MultimediaProduct {
 }
 
 model ScreenProduct {
-  id        String   @id @default(uuid())
-  brand     String   @db.VarChar(150)
-  storageGb Int?     @map("storage_gb")
-  ramGb     Int?     @map("ram_gb")
-  cores     Int?
-  sizeInch  Decimal? @map("size_inch") @db.Decimal(5, 2)
-  sizeLabel String?  @map("size_label") @db.VarChar(100)
-  quantity  Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  brand              String   @db.VarChar(150)
+  storageGb          Int?     @map("storage_gb")
+  ramGb              Int?     @map("ram_gb")
+  cores              Int?
+  sizeInch           Decimal? @map("size_inch") @db.Decimal(5, 2)
+  sizeLabel          String?  @map("size_label") @db.VarChar(100)
+  quantity           Int      @default(0)
+  criticalStockLevel Int      @default(0) @map("critical_stock_level")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
-  operations VehicleOperation[]
+  operations      VehicleOperation[]
+  stockOrderItems StockOrderItem[]
 
   @@index([brand])
   @@map("screen_products")
@@ -206,7 +233,8 @@ model SoundSystemProduct {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  offerItems SoundSystemOfferItem[]
+  offerItems      SoundSystemOfferItem[]
+  stockOrderItems StockOrderItem[]
 
   @@index([name])
   @@map("sound_system_products")
@@ -257,6 +285,7 @@ model StockMovement {
   quantity      Int
   referenceType String?           @map("reference_type") @db.VarChar(40)
   referenceId   String?           @map("reference_id")
+  note          String?           @db.Text
   createdAt     DateTime          @default(now()) @map("created_at")
 
   @@index([stockType, productId])
@@ -274,9 +303,61 @@ model Supplier {
 
   transactions SupplierTransaction[]
   operations   VehicleOperation[]
+  stockOrders  StockOrder[]
 
   @@index([name])
   @@map("suppliers")
+}
+
+model StockOrder {
+  id                   String                  @id @default(uuid())
+  supplierId           String                  @map("supplier_id")
+  currency             String                  @db.VarChar(3)
+  orderDate            DateTime                @map("order_date") @db.Date
+  expectedDeliveryDate DateTime                @map("expected_delivery_date") @db.Date
+  paymentStatus        StockOrderPaymentStatus @default(UNPAID) @map("payment_status")
+  paymentMethod        StockOrderPaymentMethod @map("payment_method")
+  note                 String?                 @db.Text
+  status               StockOrderStatus        @default(DRAFT)
+  receivedAt           DateTime?               @map("received_at")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
+
+  supplier Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items    StockOrderItem[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([orderDate])
+  @@map("stock_orders")
+}
+
+model StockOrderItem {
+  id                     String   @id @default(uuid())
+  orderId                String   @map("order_id")
+  stockType              StockType @map("stock_type")
+  multimediaProductId    String?  @map("multimedia_product_id")
+  screenProductId        String?  @map("screen_product_id")
+  soundSystemProductId   String?  @map("sound_system_product_id")
+  isNewProduct           Boolean  @default(false) @map("is_new_product")
+  productSnapshot        Json     @map("product_snapshot")
+  quantity               Int
+  unitPrice              Decimal  @map("unit_price") @db.Decimal(14, 2)
+  totalPrice             Decimal  @map("total_price") @db.Decimal(14, 2)
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  order             StockOrder          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  multimediaProduct MultimediaProduct?  @relation(fields: [multimediaProductId], references: [id], onDelete: SetNull)
+  screenProduct     ScreenProduct?      @relation(fields: [screenProductId], references: [id], onDelete: SetNull)
+  soundSystemProduct SoundSystemProduct? @relation(fields: [soundSystemProductId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([stockType])
+  @@index([multimediaProductId])
+  @@index([screenProductId])
+  @@index([soundSystemProductId])
+  @@map("stock_order_items")
 }
 
 model SupplierTransaction {

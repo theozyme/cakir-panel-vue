@@ -33,6 +33,12 @@ export type SupplierDto = {
   periodPayments: string;
 };
 
+export type SupplierLookupDto = {
+  id: string;
+  name: string;
+  currency: SupplierCurrency;
+};
+
 export type SupplierTransactionDto = {
   id: string;
   transactionAt: string;

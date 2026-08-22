@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import {
+  createSupplier,
   createManualSupplierTransaction,
   getSupplierSummary,
   getSupplierTrend,
@@ -9,6 +10,14 @@ import {
   parseManualSupplierTransaction,
   parseSupplierPeriodFilter,
 } from "./supplier.service.js";
+
+export const postSupplier = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(201).json(await createSupplier(req.body));
+  } catch (error) {
+    next(error);
+  }
+};
 
 const supplierIdFrom = (req: Request): string => {
   const value = req.params.supplierId;

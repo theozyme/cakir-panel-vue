@@ -7,19 +7,16 @@ import {
 } from "@/types/orders";
 
 const statusTone: Record<OrderStatus, string> = {
-  taslak: "bg-muted text-muted-foreground",
-  verildi: "bg-primary/10 text-primary",
-  hazirlaniyor: "bg-warning/20 text-warning",
-  kargoda: "bg-primary/15 text-primary",
-  kismi_teslim: "bg-warning/20 text-warning",
-  teslim_edildi: "bg-success/15 text-success",
-  iptal: "bg-destructive/10 text-destructive",
+  DRAFT: "bg-muted text-muted-foreground",
+  ORDERED: "bg-primary/10 text-primary",
+  RECEIVED: "bg-success/15 text-success",
+  CANCELLED: "bg-destructive/10 text-destructive",
 };
 
 const payTone: Record<OrderPaymentStatus, string> = {
-  odenmedi: "bg-destructive/10 text-destructive",
-  kismi: "bg-warning/20 text-warning",
-  odendi: "bg-success/15 text-success",
+  UNPAID: "bg-destructive/10 text-destructive",
+  PARTIAL: "bg-warning/20 text-warning",
+  PAID: "bg-success/15 text-success",
 };
 
 const base =

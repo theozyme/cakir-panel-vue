@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "test:integration": "tsx --test src/modules/stock-order/stock-order.integration.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio"
   },

@@ -4,11 +4,12 @@ import { HttpError, isPrismaErrorCode } from "../../lib/http-error.js";
 import { moneyToString, parseMoney } from "../../lib/money.js";
 import { getPrisma } from "../../lib/prisma.js";
 import { withSerializableTransaction } from "../../lib/transaction.js";
-import { asRecord, optionalString } from "../../lib/validation.js";
+import { asRecord, oneOf, optionalString, requiredString } from "../../lib/validation.js";
 import type {
   ManualSupplierTransactionInput,
   SupplierCurrency,
   SupplierDto,
+  SupplierLookupDto,
   SupplierPaymentInput,
   SupplierPeriod,
   SupplierPeriodFilter,
@@ -22,6 +23,31 @@ import type {
 const timeZone = "Europe/Istanbul";
 const zero = () => new Prisma.Decimal(0);
 const emptyTrendValues = (): TrendCurrencyValues => ({ debtIncrease: "0.00", payments: "0.00" });
+
+export const createSupplier = async (body: unknown): Promise<SupplierLookupDto> => {
+  const values = asRecord(body);
+  const name = requiredString(values.name, "name", 150);
+  const supplierCurrency = oneOf(values.currency, "currency", ["TRY", "USD"] as const);
+
+  try {
+    return await withSerializableTransaction(async (tx) => {
+      const duplicate = await tx.supplier.findFirst({
+        where: { name: { equals: name, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (duplicate) throw new HttpError(409, "Supplier adi zaten mevcut");
+
+      const supplier = await tx.supplier.create({
+        data: { name, currency: supplierCurrency },
+        select: { id: true, name: true, currency: true },
+      });
+      return { id: supplier.id, name: supplier.name, currency: asCurrency(supplier.currency) };
+    });
+  } catch (error) {
+    if (isPrismaErrorCode(error, "P2002")) throw new HttpError(409, "Supplier adi zaten mevcut");
+    throw error;
+  }
+};
 
 type DateParts = {
   year: number;

@@ -12,7 +12,10 @@ export const listMultimediaProducts = async (
   inStockOnly: boolean,
 ): Promise<MultimediaProductDto[]> =>
   getPrisma().multimediaProduct.findMany({
-    ...(inStockOnly ? { where: { quantity: { gt: 0 } } } : {}),
+    where: {
+      isActive: true,
+      ...(inStockOnly ? { quantity: { gt: 0 } } : {}),
+    },
     orderBy: [{ brand: "asc" }, { model: "asc" }, { code: "asc" }],
     select: {
       id: true,
@@ -27,7 +30,10 @@ export const listMultimediaProducts = async (
 
 export const listScreenProducts = async (inStockOnly: boolean): Promise<ScreenProductDto[]> => {
   const rows = await getPrisma().screenProduct.findMany({
-    ...(inStockOnly ? { where: { quantity: { gt: 0 } } } : {}),
+    where: {
+      isActive: true,
+      ...(inStockOnly ? { quantity: { gt: 0 } } : {}),
+    },
     orderBy: [{ brand: "asc" }, { sizeInch: "asc" }],
   });
 
@@ -71,6 +77,7 @@ export const consumeMultimediaStock = async (
   const multimediaUpdate = await tx.multimediaProduct.updateMany({
     where: {
       id: multimediaProductId,
+      isActive: true,
       quantity: { gte: 1 },
     },
     data: {
@@ -85,6 +92,7 @@ export const consumeMultimediaStock = async (
   const screenUpdate = await tx.screenProduct.updateMany({
     where: {
       id: screenProductId,
+      isActive: true,
       quantity: { gte: 1 },
     },
     data: {

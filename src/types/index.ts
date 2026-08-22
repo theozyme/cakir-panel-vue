@@ -32,21 +32,6 @@ export interface Operation {
   not?: string;
 }
 
-export interface StockItem {
-  id: string;
-  kategori: "multimedya" | "ekran" | "ses_sistemi";
-  urun: string;
-  kod: string;
-  marka: string;
-  tedarikci: string;
-  alisFiyati: number;
-  sonAlisFiyati: number;
-  satisFiyati: number;
-  adet: number;
-  raf: string;
-  kritikSeviye: number;
-}
-
 export interface Wholesaler {
   id: string;
   ad: string;
