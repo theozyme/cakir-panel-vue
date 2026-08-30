@@ -47,7 +47,7 @@ export type CreateVehicleOperationResponse = {
   id: string;
   visitId: string;
   vehicleId: string;
-  operationType: string;
+  operationType: string | null;
   description: string;
   price: string;
   currency: SupportedCurrency;
@@ -55,6 +55,35 @@ export type CreateVehicleOperationResponse = {
   operationAt: string;
   note: string | null;
   soundOfferId: string | null;
+  revision: number;
+};
+
+export type VehicleOperationDetail = CreateVehicleOperationResponse & {
+  plate: string;
+  customer: {
+    firstName: string | null;
+    lastName: string | null;
+    phone: string | null;
+    note: string | null;
+  } | null;
+  vehicle: { brand: string | null; model: string | null };
+  multimediaProductId: string | null;
+  screenProductId: string | null;
+  mailOrderSupplierId: string | null;
+  multimediaProduct: { id: string; code: string; brand: string | null; model: string | null } | null;
+  screenProduct: { id: string; brand: string; sizeLabel: string | null } | null;
+  soundOffer: { id: string; status: string; saleType: string } | null;
+  mailOrderSupplier: { id: string; name: string; currency: string } | null;
+  hasStockImpact: boolean;
+  hasMailOrderImpact: boolean;
+};
+
+export type DeleteVehicleOperationResponse = {
+  operationId: string;
+  vehicleId: string;
+  visitId: string;
+  deletedAt: string;
+  revision: number;
 };
 
 export type VehicleOperationHistoryItem = {
@@ -78,6 +107,9 @@ export type VehicleOperationHistoryItem = {
   currency: SupportedCurrency;
   operationAt: string;
   note: string | null;
+  revision: number;
+  hasStockImpact: boolean;
+  hasMailOrderImpact: boolean;
 };
 
 export type VehicleOperationHistoryResponse = {

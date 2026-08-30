@@ -1,7 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 
-import { createVisitForVehicle } from "../vehicle-visit/vehicle-visit.service.js";
-import { getVehicleHistory, listVehicles } from "./vehicle.service.js";
+import { getVehicleHistory, getVehicleIntakeContext, listVehicles } from "./vehicle.service.js";
 
 export const getVehicles = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -24,12 +23,13 @@ export const getVehicleHistoryController = async (
   }
 };
 
-export const postVehicleVisit = async (req: Request, res: Response, next: NextFunction) => {
+export const getVehicleIntakeContextController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
-    const vehicleId = req.params.vehicleId;
-    res
-      .status(201)
-      .json(await createVisitForVehicle(typeof vehicleId === "string" ? vehicleId : ""));
+    res.json(await getVehicleIntakeContext(req.params.vehicleId ?? ""));
   } catch (error) {
     next(error);
   }

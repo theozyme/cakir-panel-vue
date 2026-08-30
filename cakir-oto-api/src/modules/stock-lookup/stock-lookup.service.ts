@@ -126,6 +126,42 @@ export const consumeMultimediaStock = async (
   });
 };
 
+export const restoreMultimediaStock = async (
+  tx: BusinessTransaction,
+  operationId: string,
+  multimediaProductId: string,
+  screenProductId: string,
+) => {
+  await tx.multimediaProduct.update({
+    where: { id: multimediaProductId },
+    data: { quantity: { increment: 1 } },
+  });
+  await tx.screenProduct.update({
+    where: { id: screenProductId },
+    data: { quantity: { increment: 1 } },
+  });
+  await tx.stockMovement.createMany({
+    data: [
+      {
+        stockType: "MULTIMEDIA",
+        productId: multimediaProductId,
+        movementType: "VEHICLE_OPERATION_REVERSAL",
+        quantity: 1,
+        referenceType: "VEHICLE_OPERATION",
+        referenceId: operationId,
+      },
+      {
+        stockType: "SCREEN",
+        productId: screenProductId,
+        movementType: "VEHICLE_OPERATION_REVERSAL",
+        quantity: 1,
+        referenceType: "VEHICLE_OPERATION",
+        referenceId: operationId,
+      },
+    ],
+  });
+};
+
 export const consumeSoundStock = async (
   tx: BusinessTransaction,
   operationId: string,
@@ -168,6 +204,37 @@ export const consumeSoundStock = async (
       productId,
       movementType: "VEHICLE_OPERATION" as const,
       quantity: -quantity,
+      referenceType: "VEHICLE_OPERATION",
+      referenceId: operationId,
+    })),
+  });
+};
+
+export const restoreSoundStock = async (
+  tx: BusinessTransaction,
+  operationId: string,
+  items: SoundStockConsumptionItem[],
+) => {
+  const aggregated = new Map<string, number>();
+  for (const item of items) {
+    if (!item.productId) {
+      throw new HttpError(409, "Teklif kalemlerinden biri stok urunune bagli degil");
+    }
+    aggregated.set(item.productId, (aggregated.get(item.productId) ?? 0) + item.quantity);
+  }
+  const sortedItems = [...aggregated.entries()].sort(([left], [right]) => left.localeCompare(right));
+  for (const [productId, quantity] of sortedItems) {
+    await tx.soundSystemProduct.update({
+      where: { id: productId },
+      data: { quantity: { increment: quantity } },
+    });
+  }
+  await tx.stockMovement.createMany({
+    data: sortedItems.map(([productId, quantity]) => ({
+      stockType: "SOUND_SYSTEM" as const,
+      productId,
+      movementType: "VEHICLE_OPERATION_REVERSAL" as const,
+      quantity,
       referenceType: "VEHICLE_OPERATION",
       referenceId: operationId,
     })),

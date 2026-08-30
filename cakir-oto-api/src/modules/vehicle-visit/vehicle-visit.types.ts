@@ -16,9 +16,3 @@ export type VehicleVisitDetail = {
     note: string | null;
   } | null;
 };
-
-export type CreateVehicleVisitResponse = {
-  visitId: string;
-  vehicleId: string;
-  arrivalAt: string;
-};

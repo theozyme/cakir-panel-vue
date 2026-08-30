@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { apiRequest } from "@/lib/api";
+import { inventoryStockHighlightClass } from "@/lib/inventory-style";
 import { formatMoneyString } from "@/lib/money";
 import {
   inventoryProductLabel,
@@ -194,7 +195,10 @@ function StokPage() {
               </thead>
               <tbody>
                 {products.map((product) => (
-                  <tr key={product.id} className="border-t border-border/60 hover:bg-muted/30">
+                  <tr
+                    key={product.id}
+                    className={`border-t border-border/60 transition-colors ${inventoryStockHighlightClass(product.status)}`}
+                  >
                     <td className="px-4 py-3 font-semibold">{inventoryProductLabel(product)}</td>
                     <td className="px-4 py-3 text-muted-foreground">{productSecondary(product) || "—"}</td>
                     <td className="px-4 py-3 text-center text-base font-bold">{product.quantity}</td>

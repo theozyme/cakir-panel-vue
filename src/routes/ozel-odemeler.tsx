@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Landmark, Pencil, Plus, Save, Trash2, Users, X } from "lucide-react";
+import { ArrowDownUp, Landmark, Pencil, Plus, Save, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -96,6 +96,7 @@ function OzelOdemeler() {
   const [tab, setTab] = useState<SpecialPaymentCategory>("personnel");
   const [period, setPeriod] = useState<SpecialPaymentPeriod>("month");
   const [date, setDate] = useState(todayInIstanbul);
+  const [personnelDateSort, setPersonnelDateSort] = useState<"asc" | "desc">("desc");
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [personnelOpen, setPersonnelOpen] = useState(false);
   const [loanOpen, setLoanOpen] = useState(false);
@@ -121,8 +122,7 @@ function OzelOdemeler() {
   });
   const invoiceQuery = useQuery({
     queryKey: ["special-payments", "invoice-types"],
-    queryFn: () =>
-      apiRequest<SpecialPaymentLookup[]>("/api/special-payments/invoice-types"),
+    queryFn: () => apiRequest<SpecialPaymentLookup[]>("/api/special-payments/invoice-types"),
   });
 
   const invalidatePayments = () =>
@@ -141,8 +141,40 @@ function OzelOdemeler() {
   });
 
   const selectedLabel = tabs.find((item) => item.value === tab)?.label ?? "";
-  const items = paymentsQuery.data?.items ?? [];
-  const activePersonnel = (personnelQuery.data ?? []).filter((item) => item.isActive);
+  const items = paymentsQuery.data?.items;
+  const displayedItems = useMemo(() => {
+    const currentItems = items ?? [];
+    if (tab !== "personnel") return currentItems;
+
+    return [...currentItems].sort((first, second) => {
+      const comparison = first.paymentDate.localeCompare(second.paymentDate);
+      return personnelDateSort === "asc" ? comparison : -comparison;
+    });
+  }, [items, personnelDateSort, tab]);
+  const activePersonnel = useMemo(
+    () => (personnelQuery.data ?? []).filter((item) => item.isActive),
+    [personnelQuery.data],
+  );
+  const personnelSections = useMemo(() => {
+    if (tab !== "personnel") return [];
+
+    const grouped = new Map<string, SpecialPaymentItem[]>(
+      activePersonnel.map((person) => [person.name, []]),
+    );
+    displayedItems.forEach((item) => {
+      const personItems = grouped.get(item.title) ?? [];
+      personItems.push(item);
+      grouped.set(item.title, personItems);
+    });
+
+    return [...grouped.entries()]
+      .map(([personName, personItems]) => ({
+        personName,
+        items: personItems,
+        total: personItems.reduce((sum, item) => sum + Number(item.amount), 0),
+      }))
+      .sort((first, second) => first.personName.localeCompare(second.personName, "tr"));
+  }, [activePersonnel, displayedItems, tab]);
   const activeLoans = (loanQuery.data ?? []).filter((item) => item.isActive);
 
   const dateInput =
@@ -250,91 +282,148 @@ function OzelOdemeler() {
               </span>
             </div>
           </div>
-          <Button onClick={() => setPaymentOpen(true)}>
-            <Plus /> Aylık Ödeme Ekle
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {tab === "personnel" && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  setPersonnelDateSort((current) => (current === "asc" ? "desc" : "asc"))
+                }
+              >
+                <ArrowDownUp />
+                Tarih: {personnelDateSort === "desc" ? "Yeni → Eski" : "Eski → Yeni"}
+              </Button>
+            )}
+            <Button onClick={() => setPaymentOpen(true)}>
+              <Plus /> Ödeme Ekle
+            </Button>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold">Başlık</th>
-                <th className="px-4 py-3 text-left font-semibold">Not / Açıklama</th>
-                <th className="px-4 py-3 text-left font-semibold">Tarih</th>
-                <th className="px-4 py-3 text-right font-semibold">Tutar</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {paymentsQuery.isPending && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    Kayıtlar yükleniyor…
-                  </td>
-                </tr>
-              )}
-              {paymentsQuery.isError && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-destructive">
-                    Kayıtlar yüklenemedi: {errorMessage(paymentsQuery.error)}
-                  </td>
-                </tr>
-              )}
-              {!paymentsQuery.isPending && !paymentsQuery.isError && items.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                    Seçili dönemde kayıt yok
-                  </td>
-                </tr>
-              )}
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-border/60">
-                  <td className="px-4 py-3 font-semibold">{item.title}</td>
-                  <td className="max-w-sm px-4 py-3 text-muted-foreground">
-                    {item.note || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{formatDate(item.paymentDate)}</td>
-                  <td className="px-4 py-3 text-right font-bold text-destructive">
-                    -{formatTRY(Number(item.amount))}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="Ödeme kaydını sil"
-                          className="grid h-8 w-8 place-items-center rounded-lg border border-input text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Ödeme kaydı silinsin mi?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Yalnızca “{item.title}” ödeme kaydı silinecek. Bağlı master kayıt
-                            korunacak.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Vazgeç</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            disabled={deleteMutation.isPending}
-                            onClick={() => deleteMutation.mutate(item)}
+        {paymentsQuery.isPending && (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            Kayıtlar yükleniyor…
+          </div>
+        )}
+        {paymentsQuery.isError && (
+          <div className="px-4 py-10 text-center text-sm text-destructive">
+            Kayıtlar yüklenemedi: {errorMessage(paymentsQuery.error)}
+          </div>
+        )}
+        {!paymentsQuery.isPending && !paymentsQuery.isError && tab === "personnel" && (
+          <div className="space-y-4">
+            {personnelSections.map((section) => (
+              <section key={section.personName} className="overflow-hidden rounded-xl border">
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/40 px-4 py-3">
+                  <div>
+                    <h3 className="font-bold">{section.personName}</h3>
+                    <div className="text-xs text-muted-foreground">
+                      {section.items.length} ödeme kaydı
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Personel toplamı</div>
+                    <div className="font-bold text-destructive">-{formatTRY(section.total)}</div>
+                  </div>
+                </div>
+                {section.items.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                    Seçili dönemde ödeme kaydı yok
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/20 text-xs uppercase text-muted-foreground">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left font-semibold">Not / Açıklama</th>
+                          <th
+                            className="px-4 py-2.5 text-left font-semibold"
+                            aria-sort={personnelDateSort === "asc" ? "ascending" : "descending"}
                           >
-                            Sil
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </td>
+                            Tarih
+                          </th>
+                          <th className="px-4 py-2.5 text-right font-semibold">Tutar</th>
+                          <th className="px-4 py-2.5" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.items.map((item) => (
+                          <tr key={item.id} className="border-t border-border/60">
+                            <td className="max-w-sm px-4 py-3 text-muted-foreground">
+                              {item.note || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {formatDate(item.paymentDate)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-destructive">
+                              -{formatTRY(Number(item.amount))}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <PaymentDeleteButton
+                                item={item}
+                                isPending={deleteMutation.isPending}
+                                onDelete={() => deleteMutation.mutate(item)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            ))}
+            {personnelSections.length === 0 && (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                Gösterilecek personel bulunamadı
+              </div>
+            )}
+          </div>
+        )}
+        {!paymentsQuery.isPending && !paymentsQuery.isError && tab !== "personnel" && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold">Başlık</th>
+                  <th className="px-4 py-3 text-left font-semibold">Not / Açıklama</th>
+                  <th className="px-4 py-3 text-left font-semibold">Tarih</th>
+                  <th className="px-4 py-3 text-right font-semibold">Tutar</th>
+                  <th className="px-4 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {displayedItems.map((item) => (
+                  <tr key={item.id} className="border-t border-border/60">
+                    <td className="px-4 py-3 font-semibold">{item.title}</td>
+                    <td className="max-w-sm px-4 py-3 text-muted-foreground">{item.note || "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {formatDate(item.paymentDate)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-destructive">
+                      -{formatTRY(Number(item.amount))}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <PaymentDeleteButton
+                        item={item}
+                        isPending={deleteMutation.isPending}
+                        onDelete={() => deleteMutation.mutate(item)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {displayedItems.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                      Seçili dönemde kayıt yok
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {paymentOpen && (
@@ -386,6 +475,48 @@ function OzelOdemeler() {
         error={loanQuery.error}
       />
     </AppLayout>
+  );
+}
+
+function PaymentDeleteButton({
+  item,
+  isPending,
+  onDelete,
+}: {
+  item: SpecialPaymentItem;
+  isPending: boolean;
+  onDelete: () => void;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          type="button"
+          aria-label="Ödeme kaydını sil"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-input text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Ödeme kaydı silinsin mi?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Yalnızca “{item.title}” ödeme kaydı silinecek. Bağlı master kayıt korunacak.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={isPending}
+            onClick={onDelete}
+          >
+            Sil
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -482,9 +613,7 @@ function PaymentDialog({
                 disabled={lookupsLoading || Boolean(lookupsError) || options.length === 0}
                 required
               >
-                <option value="">
-                  {lookupsLoading ? "Yükleniyor…" : "Aktif kayıt seçin"}
-                </option>
+                <option value="">{lookupsLoading ? "Yükleniyor…" : "Aktif kayıt seçin"}</option>
                 {options.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -636,7 +765,9 @@ function MaintenanceDialog({
           </Button>
         </form>
         <div className="divide-y rounded-lg border">
-          {isLoading && <div className="p-6 text-center text-sm text-muted-foreground">Yükleniyor…</div>}
+          {isLoading && (
+            <div className="p-6 text-center text-sm text-muted-foreground">Yükleniyor…</div>
+          )}
           {error && (
             <div className="p-6 text-center text-sm text-destructive">
               Kayıtlar yüklenemedi: {errorMessage(error)}

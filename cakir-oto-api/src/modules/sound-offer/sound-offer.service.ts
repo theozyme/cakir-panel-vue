@@ -178,7 +178,7 @@ export const getAcceptedSoundOfferForOperation = async (
 ) => {
   const offer = await tx.soundSystemOffer.findUnique({
     where: { id: offerId },
-    include: { items: true },
+    include: { items: true, operation: { select: { id: true } } },
   });
 
   if (!offer) {
@@ -191,6 +191,9 @@ export const getAcceptedSoundOfferForOperation = async (
 
   if (offer.items.length === 0) {
     throw new HttpError(409, "Sound offer kalemi bulunamadi");
+  }
+  if (offer.operation) {
+    throw new HttpError(409, "Sound offer baska bir operation tarafindan kullaniliyor");
   }
 
   return offer;
@@ -209,5 +212,26 @@ export const markSoundOfferUsed = async (tx: BusinessTransaction, offerId: strin
 
   if (update.count !== 1) {
     throw new HttpError(409, "Sound offer daha once kullanilmis veya iptal edilmis");
+  }
+};
+
+export const releaseSoundOffer = async (
+  tx: BusinessTransaction,
+  offerId: string,
+  operationId: string,
+) => {
+  const offer = await tx.soundSystemOffer.findUnique({
+    where: { id: offerId },
+    select: { status: true, operation: { select: { id: true } } },
+  });
+  if (offer?.status !== "USED" || offer.operation?.id !== operationId) {
+    throw new HttpError(409, "Sound offer bu operation tarafindan kullanilmiyor");
+  }
+  const update = await tx.soundSystemOffer.updateMany({
+    where: { id: offerId, status: "USED" },
+    data: { status: "ACCEPTED" },
+  });
+  if (update.count !== 1) {
+    throw new HttpError(409, "Sound offer operation tarafindan kullanilabilir durumda degil");
   }
 };

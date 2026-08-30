@@ -2,7 +2,7 @@ import { getPrisma } from "../../lib/prisma.js";
 import { HttpError } from "../../lib/http-error.js";
 import { moneyToString } from "../../lib/money.js";
 import type { SupportedCurrency } from "../vehicle-operation/vehicle-operation.types.js";
-import type { VehicleHistoryResponse, VehicleLookupResponse } from "./vehicle.types.js";
+import type { VehicleHistoryResponse, VehicleIntakeContext, VehicleLookupResponse } from "./vehicle.types.js";
 
 const parseLimit = (value: unknown): number => {
   if (value === undefined) return 10;
@@ -54,6 +54,30 @@ export const listVehicles = async (
   };
 };
 
+export const getVehicleIntakeContext = async (vehicleId: string): Promise<VehicleIntakeContext> => {
+  if (!vehicleId) throw new HttpError(400, "vehicleId zorunlu");
+  const row = await getPrisma().vehicle.findUnique({
+    where: { id: vehicleId },
+    select: {
+      id: true,
+      plate: true,
+      brand: true,
+      model: true,
+      visits: {
+        where: { customerId: { not: null } },
+        orderBy: [{ arrivalAt: "desc" }, { id: "desc" }],
+        take: 1,
+        select: { customer: { select: { id: true, firstName: true, lastName: true, phone: true, note: true } } },
+      },
+    },
+  });
+  if (!row) throw new HttpError(404, "Vehicle bulunamadi");
+  return {
+    vehicle: { id: row.id, plate: row.plate, brand: row.brand, model: row.model },
+    customer: row.visits[0]?.customer ?? null,
+  };
+};
+
 export const getVehicleHistory = async (vehicleId: string): Promise<VehicleHistoryResponse> => {
   if (!vehicleId) throw new HttpError(400, "vehicleId zorunlu");
 
@@ -65,6 +89,7 @@ export const getVehicleHistory = async (vehicleId: string): Promise<VehicleHisto
       brand: true,
       model: true,
       visits: {
+        where: { operations: { some: { deletedAt: null } } },
         orderBy: [{ arrivalAt: "desc" }, { id: "desc" }],
         select: {
           id: true,
@@ -74,6 +99,7 @@ export const getVehicleHistory = async (vehicleId: string): Promise<VehicleHisto
             select: { id: true, firstName: true, lastName: true, phone: true, note: true },
           },
           operations: {
+            where: { deletedAt: null },
             orderBy: [{ operationAt: "desc" }, { id: "desc" }],
             select: {
               id: true,
@@ -84,6 +110,7 @@ export const getVehicleHistory = async (vehicleId: string): Promise<VehicleHisto
               paymentMethod: true,
               operationAt: true,
               note: true,
+              revision: true,
               multimediaProduct: {
                 select: { id: true, code: true, forx: true, model: true, brand: true, shelf: true },
               },
@@ -147,6 +174,7 @@ export const getVehicleHistory = async (vehicleId: string): Promise<VehicleHisto
         paymentMethod: operation.paymentMethod,
         operationAt: operation.operationAt.toISOString(),
         note: operation.note,
+        revision: operation.revision,
         multimediaProduct: operation.multimediaProduct,
         screenProduct: operation.screenProduct
           ? {

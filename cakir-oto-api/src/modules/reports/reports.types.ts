@@ -1,5 +1,6 @@
 export type ReportPeriod = "day" | "month" | "year";
 export type ReportCurrency = "TRY" | "USD";
+export type DashboardPaymentPeriod = "today" | "month" | "30d" | "90d" | "1y";
 
 export type CurrencyTotals = Record<ReportCurrency, string>;
 
@@ -69,4 +70,18 @@ export type ReportsOverviewDto = {
   paymentMethods: ReportDistributionItemDto[];
   expenseBreakdown: ExpenseBreakdownItemDto[];
   trend: ReportTrendItemDto[];
+};
+
+export type DashboardDailyEarningDto = {
+  date: string;
+  label: string;
+  amounts: CurrencyTotals;
+};
+
+export type DashboardFinanceDto = {
+  date: string;
+  timeZone: "Europe/Istanbul";
+  paymentPeriod: DashboardPaymentPeriod;
+  dailyEarnings: DashboardDailyEarningDto[];
+  paymentMethods: ReportDistributionItemDto[];
 };

@@ -65,7 +65,7 @@ export const parseInventoryListFilter = (query: unknown): InventoryListFilter =>
   };
 };
 
-const inventoryStatus = (quantity: number, criticalStockLevel: number): InventoryStatus => {
+export const inventoryStatus = (quantity: number, criticalStockLevel: number): InventoryStatus => {
   if (quantity === 0) return "OUT_OF_STOCK";
   return quantity <= criticalStockLevel ? "CRITICAL" : "SUFFICIENT";
 };

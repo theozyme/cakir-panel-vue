@@ -70,8 +70,14 @@ enum StockType {
 enum StockMovementType {
   PURCHASE
   VEHICLE_OPERATION
+  VEHICLE_OPERATION_REVERSAL
   ORDER_DELIVERY
   MANUAL_CORRECTION
+}
+
+enum VehicleOperationRevisionAction {
+  UPDATE
+  DELETE
 }
 
 enum StockOrderStatus {
@@ -177,6 +183,8 @@ model VehicleOperation {
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  revision  Int       @default(1)
 
   visit             VehicleVisit       @relation(fields: [visitId], references: [id], onDelete: Cascade)
   vehicle           Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -184,13 +192,31 @@ model VehicleOperation {
   multimediaProduct MultimediaProduct? @relation(fields: [multimediaProductId], references: [id], onDelete: SetNull)
   screenProduct     ScreenProduct?     @relation(fields: [screenProductId], references: [id], onDelete: SetNull)
   soundOffer        SoundSystemOffer?  @relation(fields: [soundOfferId], references: [id], onDelete: SetNull)
+  revisions         VehicleOperationRevision[]
 
   @@index([visitId])
   @@index([vehicleId])
   @@index([paymentMethod])
   @@index([operationAt])
+  @@index([deletedAt])
   @@index([mailOrderSupplierId])
   @@map("vehicle_operations")
+}
+
+model VehicleOperationRevision {
+  id           String                         @id @default(uuid())
+  operationId  String                         @map("operation_id")
+  action       VehicleOperationRevisionAction
+  fromRevision Int                            @map("from_revision")
+  toRevision   Int                            @map("to_revision")
+  beforeJson   Json                           @map("before_json")
+  afterJson    Json?                          @map("after_json")
+  createdAt    DateTime                       @default(now()) @map("created_at")
+
+  operation VehicleOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@index([operationId, createdAt])
+  @@map("vehicle_operation_revisions")
 }
 
 model MultimediaProduct {
@@ -386,12 +412,13 @@ model SupplierTransaction {
   sourceType    SupplierTransactionSourceType @default(MANUAL) @map("source_type")
   sourceId      String?                       @map("source_id")
   createdAt     DateTime                      @default(now()) @map("created_at")
+  voidedAt      DateTime?                     @map("voided_at")
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
-  @@unique([sourceType, sourceId])
   @@index([supplierId])
   @@index([transactionAt])
+  @@index([voidedAt])
   @@index([sourceType, sourceId])
   @@map("supplier_transactions")
 }

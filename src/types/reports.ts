@@ -1,6 +1,7 @@
 import type { Currency } from "./business";
 
 export type ReportPeriod = "day" | "month" | "year";
+export type DashboardPaymentPeriod = "today" | "month" | "30d" | "90d" | "1y";
 export type ReportCurrencyTotals = Record<Currency, string>;
 
 export type ReportDistributionItem = {
@@ -57,4 +58,16 @@ export type ReportsOverview = {
   paymentMethods: ReportDistributionItem[];
   expenseBreakdown: ReportExpenseBreakdownItem[];
   trend: ReportTrendItem[];
+};
+
+export type DashboardFinance = {
+  date: string;
+  timeZone: "Europe/Istanbul";
+  paymentPeriod: DashboardPaymentPeriod;
+  dailyEarnings: Array<{
+    date: string;
+    label: string;
+    amounts: ReportCurrencyTotals;
+  }>;
+  paymentMethods: ReportDistributionItem[];
 };

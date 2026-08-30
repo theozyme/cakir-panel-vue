@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { apiRequest } from "@/lib/api";
+import { inventoryStockHighlightClass } from "@/lib/inventory-style";
 import { formatMoneyString } from "@/lib/money";
 import {
   inventoryProductCode,
@@ -240,7 +241,10 @@ function SiparisVerPage() {
             {productsQuery.error && <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{productsQuery.error.message}</div>}
             <div className="space-y-3">
               {(productsQuery.data?.items ?? []).map((product) => (
-                <div key={product.id} className="rounded-xl border border-border p-4">
+                <div
+                  key={product.id}
+                  className={`rounded-xl border border-border p-4 transition-colors ${inventoryStockHighlightClass(product.status)}`}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div><div className="font-semibold">{inventoryProductLabel(product)}</div><div className="text-xs text-muted-foreground">{inventoryProductCode(product) || inventoryTypeLabels[product.type]} · Mevcut stok: {product.quantity}</div></div>
                     <div className="flex flex-wrap items-end gap-2">

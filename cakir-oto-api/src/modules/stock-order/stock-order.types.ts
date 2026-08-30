@@ -1,4 +1,4 @@
-import type { InventoryStockType } from "../inventory/inventory.types.js";
+import type { InventoryStatus, InventoryStockType } from "../inventory/inventory.types.js";
 
 export type StockOrderStatusValue = "DRAFT" | "ORDERED" | "RECEIVED" | "CANCELLED";
 export type StockOrderPaymentStatusValue = "UNPAID" | "PARTIAL" | "PAID";
@@ -28,6 +28,7 @@ export type StockOrderItemDto = {
   productSnapshot: Record<string, unknown>;
   productLabel: string;
   productCode: string | null;
+  inventoryStatus: InventoryStatus | null;
   quantity: number;
   unitPrice: string;
   totalPrice: string;

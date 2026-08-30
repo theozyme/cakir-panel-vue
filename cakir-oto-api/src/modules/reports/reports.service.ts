@@ -12,6 +12,8 @@ import {
 import type { SpecialPaymentTotals } from "../special-payment/special-payment.types.js";
 import type {
   CurrencyTotals,
+  DashboardFinanceDto,
+  DashboardPaymentPeriod,
   ExpenseBreakdownItemDto,
   ReportCurrency,
   ReportDistributionItemDto,
@@ -23,6 +25,7 @@ import type {
 
 const timeZone = "Europe/Istanbul" as const;
 const periods = ["day", "month", "year"] as const;
+const dashboardPaymentPeriods = ["today", "month", "30d", "90d", "1y"] as const;
 const currencies = ["TRY", "USD"] as const;
 
 type DateParts = {
@@ -36,6 +39,7 @@ type DateParts = {
 
 type DecimalTotals = Record<ReportCurrency, Prisma.Decimal>;
 type TrendAggregateRow = { bucket: string; currency: string; amount: Prisma.Decimal };
+type DailyEarningAggregateRow = TrendAggregateRow;
 
 const zonedFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone,
@@ -183,14 +187,70 @@ export const parseReportPeriodFilter = (query: unknown): ReportPeriodFilter => {
   };
 };
 
+type DashboardFinanceFilter = {
+  date: string;
+  dailyStart: Date;
+  dailyEnd: Date;
+  paymentPeriod: DashboardPaymentPeriod;
+  paymentStart: Date;
+  paymentEnd: Date;
+};
+
+const dateKeyWithOffset = (date: string, dayOffset: number): string => {
+  const [yearText, monthText, dayText] = date.split("-");
+  const shifted = new Date(
+    Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText) + dayOffset),
+  );
+
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    shifted.getUTCDate(),
+  ).padStart(2, "0")}`;
+};
+
+export const parseDashboardFinanceFilter = (query: unknown): DashboardFinanceFilter => {
+  const values = asRecord(query, "query");
+  const date = parseDateKey(values.date);
+  const rawPaymentPeriod = scalarString(values.paymentPeriod, "paymentPeriod");
+  const paymentPeriod: DashboardPaymentPeriod = rawPaymentPeriod
+    ? oneOf(rawPaymentPeriod, "paymentPeriod", dashboardPaymentPeriods)
+    : "month";
+  const dayFilter = parseReportPeriodFilter({ period: "day", date });
+  const monthFilter = parseReportPeriodFilter({ period: "month", date });
+  const firstDayFilter = parseReportPeriodFilter({
+    period: "day",
+    date: dateKeyWithOffset(date, -6),
+  });
+  const rollingDayOffsets: Partial<Record<DashboardPaymentPeriod, number>> = {
+    today: 0,
+    "30d": -29,
+    "90d": -89,
+    "1y": -364,
+  };
+  const paymentStart =
+    paymentPeriod === "month"
+      ? monthFilter.start
+      : parseReportPeriodFilter({
+          period: "day",
+          date: dateKeyWithOffset(date, rollingDayOffsets[paymentPeriod] ?? 0),
+        }).start;
+
+  return {
+    date,
+    dailyStart: firstDayFilter.start,
+    dailyEnd: dayFilter.end,
+    paymentPeriod,
+    paymentStart,
+    paymentEnd: paymentPeriod === "month" ? monthFilter.end : dayFilter.end,
+  };
+};
+
 const zeroTotals = (): DecimalTotals => ({
   TRY: new Prisma.Decimal(0),
   USD: new Prisma.Decimal(0),
 });
 
-const decimalValue = (
-  value: Prisma.Decimal | string | number | null | undefined,
-): Prisma.Decimal => new Prisma.Decimal(value?.toString() ?? "0");
+const decimalValue = (value: Prisma.Decimal | string | number | null | undefined): Prisma.Decimal =>
+  new Prisma.Decimal(value?.toString() ?? "0");
 
 const asCurrency = (value: string): ReportCurrency => {
   if (!currencies.includes(value as ReportCurrency)) {
@@ -232,6 +292,7 @@ const getTrendAggregateRows = async (
       FROM "vehicle_operations"
       WHERE "operation_at" >= CAST(${start} AS timestamp)
         AND "operation_at" < CAST(${end} AS timestamp)
+        AND "deleted_at" IS NULL
       GROUP BY 1, 2
       ORDER BY 1, 2
     `),
@@ -241,6 +302,7 @@ const getTrendAggregateRows = async (
       WHERE "transaction_at" >= CAST(${start} AS timestamp)
         AND "transaction_at" < CAST(${end} AS timestamp)
         AND "type" = 'PAYMENT'
+        AND "voided_at" IS NULL
       GROUP BY 1, 2
       ORDER BY 1, 2
     `),
@@ -364,6 +426,13 @@ const buildTrend = (
 type DistributionDefinition = { key: string; label: string };
 type DistributionAccumulator = DistributionDefinition & { count: number; amounts: DecimalTotals };
 
+const paymentMethodDefinitions: DistributionDefinition[] = [
+  { key: "CASH", label: "Nakit" },
+  { key: "CREDIT_CARD", label: "Kredi Kartı" },
+  { key: "BANK_TRANSFER", label: "Banka Havalesi" },
+  { key: "MAIL_ORDER", label: "Mail Order" },
+];
+
 const baseOperationTypeDefinitions: DistributionDefinition[] = [
   { key: "MULTIMEDIA", label: "Multimedya" },
   { key: "SOUND_SYSTEM", label: "Ses Sistemi" },
@@ -406,10 +475,7 @@ const knownHistoricalDescriptions = new Map<string, DistributionDefinition>([
   ["silecek", { key: "WIPER", label: "Silecek" }],
   ["işçilik", { key: "LABOR", label: "İşçilik" }],
   ["teyp", { key: "CAR_STEREO", label: "Teyp" }],
-  [
-    "direksiyon kılıfı",
-    { key: "STEERING_WHEEL_COVER", label: "Direksiyon Kılıfı" },
-  ],
+  ["direksiyon kılıfı", { key: "STEERING_WHEEL_COVER", label: "Direksiyon Kılıfı" }],
   ["aksesuar", { key: "ACCESSORY", label: "Aksesuar" }],
   ["cam filmi", { key: "WINDOW_FILM", label: "Cam Filmi" }],
   ["ppf kaplama", { key: "PPF_COATING", label: "PPF Kaplama" }],
@@ -473,7 +539,9 @@ const serializeDistribution = (
     },
   }));
 
-const buildDistribution = <T extends { currency: string; _sum: { price: Prisma.Decimal | null }; _count: { _all: number } }>(
+const buildDistribution = <
+  T extends { currency: string; _sum: { price: Prisma.Decimal | null }; _count: { _all: number } },
+>(
   rows: T[],
   definitions: DistributionDefinition[],
   keyFromRow: (row: T) => string,
@@ -498,6 +566,74 @@ const buildDistribution = <T extends { currency: string; _sum: { price: Prisma.D
   return serializeDistribution(items, revenue);
 };
 
+const dashboardWeekdayFormatter = new Intl.DateTimeFormat("tr-TR", {
+  timeZone,
+  weekday: "short",
+});
+
+export const getDashboardFinance = async (
+  filter: DashboardFinanceFilter,
+): Promise<DashboardFinanceDto> => {
+  const prisma = getPrisma();
+  const dailyStart = utcTimestampText(filter.dailyStart);
+  const dailyEnd = utcTimestampText(filter.dailyEnd);
+  const operationLocalTime = Prisma.sql`(("operation_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Istanbul')`;
+  const operationBucket = Prisma.sql`TO_CHAR(DATE_TRUNC('day', ${operationLocalTime}), 'YYYY-MM-DD')`;
+
+  const [dailyRows, paymentMethodRows] = await Promise.all([
+    prisma.$queryRaw<DailyEarningAggregateRow[]>(Prisma.sql`
+      SELECT ${operationBucket} AS "bucket", "currency", SUM("price") AS "amount"
+      FROM "vehicle_operations"
+      WHERE "operation_at" >= CAST(${dailyStart} AS timestamp)
+        AND "operation_at" < CAST(${dailyEnd} AS timestamp)
+        AND "deleted_at" IS NULL
+      GROUP BY 1, 2
+      ORDER BY 1, 2
+    `),
+    prisma.vehicleOperation.groupBy({
+      by: ["paymentMethod", "currency"],
+      where: { operationAt: { gte: filter.paymentStart, lt: filter.paymentEnd }, deletedAt: null },
+      _sum: { price: true },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const dailyAmounts = new Map<string, DecimalTotals>();
+  dailyRows.forEach((row) =>
+    addTrendAmount(dailyAmounts, row.bucket, asCurrency(row.currency), row.amount),
+  );
+
+  const monthlyRevenue = zeroTotals();
+  paymentMethodRows.forEach((row) => {
+    const currency = asCurrency(row.currency);
+    monthlyRevenue[currency] = monthlyRevenue[currency].plus(decimalValue(row._sum.price));
+  });
+
+  const dailyEarnings = Array.from({ length: 7 }, (_, index) => {
+    const date = dateKeyWithOffset(filter.date, index - 6);
+    const dayFilter = parseReportPeriodFilter({ period: "day", date });
+
+    return {
+      date,
+      label: dashboardWeekdayFormatter.format(dayFilter.start).replace(".", ""),
+      amounts: serializeTotals(dailyAmounts.get(date) ?? zeroTotals()),
+    };
+  });
+
+  return {
+    date: filter.date,
+    timeZone,
+    paymentPeriod: filter.paymentPeriod,
+    dailyEarnings,
+    paymentMethods: buildDistribution(
+      paymentMethodRows,
+      paymentMethodDefinitions,
+      (row) => row.paymentMethod,
+      monthlyRevenue,
+    ),
+  };
+};
+
 const specialPaymentTotals = (totals: SpecialPaymentTotals): DecimalTotals => ({
   TRY: Object.values(totals).reduce(
     (sum, amount) => sum.plus(decimalValue(amount)),
@@ -510,10 +646,11 @@ export const getReportsOverview = async (
   filter: ReportPeriodFilter,
 ): Promise<ReportsOverviewDto> => {
   const prisma = getPrisma();
-  const operationWhere = { operationAt: { gte: filter.start, lt: filter.end } };
+  const operationWhere = { operationAt: { gte: filter.start, lt: filter.end }, deletedAt: null };
   const supplierWhere = {
     transactionAt: { gte: filter.start, lt: filter.end },
     type: "PAYMENT" as const,
+    voidedAt: null,
   };
   const specialPaymentFilter = parseSpecialPaymentPeriodFilter({
     period: filter.period,
@@ -591,12 +728,7 @@ export const getReportsOverview = async (
 
   const paymentMethods = buildDistribution(
     paymentMethodRows,
-    [
-      { key: "CASH", label: "Nakit" },
-      { key: "CREDIT_CARD", label: "Kredi Kartı" },
-      { key: "BANK_TRANSFER", label: "Banka Havalesi" },
-      { key: "MAIL_ORDER", label: "Mail Order" },
-    ],
+    paymentMethodDefinitions,
     (row) => row.paymentMethod,
     revenue,
   );
@@ -675,11 +807,6 @@ export const getReportsOverview = async (
     operationTypes,
     paymentMethods,
     expenseBreakdown,
-    trend: buildTrend(
-      filter,
-      trendRows.revenue,
-      trendRows.mailOrder,
-      specialDailyTotals,
-    ),
+    trend: buildTrend(filter, trendRows.revenue, trendRows.mailOrder, specialDailyTotals),
   };
 };

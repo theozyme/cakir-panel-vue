@@ -468,7 +468,7 @@ function MailOrder() {
               </thead>
               <tbody>
                 {transactionsQuery.data?.map((transaction) => (
-                  <tr key={transaction.id} className="border-t border-border/60">
+                  <tr key={transaction.id} className={`border-t border-border/60 ${transaction.voidedAt ? "opacity-55" : ""}`}>
                     <td className="px-3 py-2.5 text-muted-foreground">
                       {formatTransactionDate(transaction.transactionAt)}
                     </td>
@@ -476,6 +476,11 @@ function MailOrder() {
                       <StatusBadge tone={transactionTone(transaction.type)}>
                         {transactionLabels[transaction.type]}
                       </StatusBadge>
+                      {transaction.voidedAt && (
+                        <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          Revize/iptal
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       {transaction.note || "—"}

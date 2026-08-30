@@ -12,10 +12,12 @@ import type {
   SoundOffer,
   SoundSystemProduct,
   UsdExchangeRate,
-  VehicleVisitDetail,
+  PendingVehicle,
+  VehicleIntakeContext,
+  VehicleOperationDetail,
 } from "@/types/business";
 
-type OfferSearch = { visitId?: string };
+type OfferSearch = { pendingVehicleId?: string; vehicleId?: string; operationId?: string };
 
 const SOUND_OFFER_PREVIEW_MULTIPLIERS = {
   CASH: new Decimal("1.50"),
@@ -35,7 +37,9 @@ const calculateSalePriceTry = (
 
 export const Route = createFileRoute("/ses-sistemi/teklif-ver")({
   validateSearch: (search: Record<string, unknown>): OfferSearch => ({
-    ...(typeof search.visitId === "string" ? { visitId: search.visitId } : {}),
+    ...(typeof search.pendingVehicleId === "string" ? { pendingVehicleId: search.pendingVehicleId } : {}),
+    ...(typeof search.vehicleId === "string" ? { vehicleId: search.vehicleId } : {}),
+    ...(typeof search.operationId === "string" ? { operationId: search.operationId } : {}),
   }),
   head: () => ({
     meta: [
@@ -47,7 +51,8 @@ export const Route = createFileRoute("/ses-sistemi/teklif-ver")({
 });
 
 function TeklifVer() {
-  const { visitId } = Route.useSearch();
+  const { pendingVehicleId, vehicleId, operationId } = Route.useSearch();
+  const hasOperationContext = Boolean(pendingVehicleId || vehicleId || operationId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [saleType, setSaleType] = useState<"CASH" | "CARD">("CASH");
@@ -62,10 +67,21 @@ function TeklifVer() {
     queryKey: ["exchange-rate", "USD"],
     queryFn: () => apiRequest<UsdExchangeRate>("/api/exchange-rates/usd"),
   });
-  const visitQuery = useQuery({
-    queryKey: ["vehicle-visit", visitId],
-    queryFn: () => apiRequest<VehicleVisitDetail>(`/api/vehicle-visits/${visitId}`),
-    enabled: Boolean(visitId),
+  const contextQuery = useQuery({
+    queryKey: ["sound-offer-context", pendingVehicleId, vehicleId, operationId],
+    queryFn: async () => {
+      if (operationId) {
+        const operation = await apiRequest<VehicleOperationDetail>(`/api/vehicle-operations/${operationId}`);
+        return { plate: operation.plate, customer: operation.customer };
+      }
+      if (vehicleId) {
+        const intake = await apiRequest<VehicleIntakeContext>(`/api/vehicles/${vehicleId}/intake-context`);
+        return { plate: intake.vehicle.plate, customer: intake.customer };
+      }
+      const pending = await apiRequest<PendingVehicle>(`/api/pending-vehicles/${pendingVehicleId}`);
+      return { plate: pending.plate, customer: null };
+    },
+    enabled: hasOperationContext,
   });
 
   const products = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
@@ -122,10 +138,10 @@ function TeklifVer() {
     onSuccess: (offer) => {
       void queryClient.invalidateQueries({ queryKey: ["sound-offers"] });
       toast.success("Teklif kaydedildi; stok henüz düşülmedi");
-      if (visitId) {
+      if (hasOperationContext) {
         navigate({
           to: "/araclar/yeni",
-          search: { visitId, soundOfferId: offer.id },
+          search: { pendingVehicleId, vehicleId, operationId, soundOfferId: offer.id },
         });
       } else {
         navigate({ to: "/ses-sistemi/teklif-gecmisi" });
@@ -151,18 +167,18 @@ function TeklifVer() {
     });
   };
 
-  const customerName = visitQuery.data?.customer
-    ? [visitQuery.data.customer.firstName, visitQuery.data.customer.lastName]
+  const customerName = contextQuery.data?.customer
+    ? [contextQuery.data.customer.firstName, contextQuery.data.customer.lastName]
         .filter(Boolean)
         .join(" ")
     : "";
 
   return (
     <AppLayout title="Ses Sistemi · Teklif Ver">
-      {visitId ? (
+      {hasOperationContext ? (
         <Link
           to="/araclar/yeni"
-          search={{ visitId }}
+          search={{ pendingVehicleId, vehicleId, operationId }}
           className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> Araç İşlemine Dön
@@ -191,7 +207,7 @@ function TeklifVer() {
             <span className="mb-1 block font-medium text-muted-foreground">Plaka</span>
             <input
               readOnly
-              value={visitQuery.data?.vehicle.plate ?? ""}
+              value={contextQuery.data?.plate ?? ""}
               placeholder="34ABC123"
               className="h-9 w-full rounded-lg border border-input bg-muted px-3 text-sm"
             />

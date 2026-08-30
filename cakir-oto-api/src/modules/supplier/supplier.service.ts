@@ -18,6 +18,7 @@ import type {
   SupplierTransactionType,
   SupplierTrendItemDto,
   TrendCurrencyValues,
+  VehicleOperationSupplierPaymentState,
 } from "./supplier.types.js";
 
 const timeZone = "Europe/Istanbul";
@@ -219,7 +220,7 @@ const asCurrency = (value: string): SupplierCurrency => {
 
 const latestActiveBalances = async () =>
   getPrisma().supplierTransaction.findMany({
-    where: { supplier: { isActive: true }, balanceAfter: { not: null } },
+    where: { supplier: { isActive: true }, balanceAfter: { not: null }, voidedAt: null },
     distinct: ["supplierId"],
     orderBy: [
       { supplierId: "asc" },
@@ -243,6 +244,7 @@ export const listActiveSuppliers = async (filter: SupplierPeriodFilter): Promise
       by: ["supplierId", "type"],
       where: {
         supplier: { isActive: true },
+        voidedAt: null,
         transactionAt: { gte: filter.start, lt: filter.end },
         type: { in: ["DEBT_INCREASE", "PAYMENT"] },
       },
@@ -289,6 +291,7 @@ export const getSupplierSummary = async (
       by: ["currency", "type"],
       where: {
         supplier: { isActive: true },
+        voidedAt: null,
         transactionAt: { gte: filter.start, lt: filter.end },
         type: { in: ["DEBT_INCREASE", "PAYMENT"] },
       },
@@ -361,6 +364,7 @@ export const listSupplierTransactions = async (
     note: row.note,
     sourceType: row.sourceType,
     sourceId: row.sourceId,
+    voidedAt: row.voidedAt?.toISOString() ?? null,
   }));
 };
 
@@ -426,6 +430,7 @@ export const getSupplierTrend = async (
   const rows = await getPrisma().supplierTransaction.findMany({
     where: {
       supplier: { isActive: true },
+      voidedAt: null,
       transactionAt: { gte: filter.start, lt: filter.end },
       type: { in: ["DEBT_INCREASE", "PAYMENT"] },
     },
@@ -501,7 +506,7 @@ const lockSupplier = async (tx: SupplierPaymentInput["tx"], supplierId: string) 
 
 const latestLedgerTransaction = async (tx: SupplierPaymentInput["tx"], supplierId: string) => {
   const latest = await tx.supplierTransaction.findFirst({
-    where: { supplierId },
+    where: { supplierId, voidedAt: null },
     orderBy: [{ transactionAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select: { transactionAt: true, balanceAfter: true },
   });
@@ -551,6 +556,7 @@ export const createManualSupplierTransaction = async (
       note: row.note,
       sourceType: row.sourceType,
       sourceId: row.sourceId,
+      voidedAt: row.voidedAt?.toISOString() ?? null,
     };
   });
 
@@ -594,4 +600,146 @@ export const createVehicleOperationSupplierPayment = async ({
     }
     throw error;
   }
+};
+
+type LedgerBaseline = { supplierId: string; affectedAt: Date; balance: Prisma.Decimal };
+
+const lockSuppliers = async (tx: SupplierPaymentInput["tx"], supplierIds: string[]) => {
+  for (const supplierId of [...new Set(supplierIds)].sort()) {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`SELECT "id" FROM "suppliers" WHERE "id" = ${supplierId} FOR UPDATE`,
+    );
+    if (rows.length !== 1) throw new HttpError(404, "Supplier bulunamadi");
+  }
+};
+
+const signedLedgerEffect = (type: string, amount: Prisma.Decimal): Prisma.Decimal => {
+  if (type === "DEBT_INCREASE") return amount;
+  if (type === "PAYMENT") return amount.negated();
+  throw new HttpError(
+    409,
+    "Tedarikci hareketlerinde yorumlanamayan ADJUSTMENT/CANCEL kaydi var; bakiye guvenle revize edilemedi",
+  );
+};
+
+const resolveLedgerBaseline = async (
+  tx: SupplierPaymentInput["tx"],
+  supplierId: string,
+  affectedAt: Date,
+): Promise<LedgerBaseline> => {
+  const previous = await tx.supplierTransaction.findFirst({
+    where: { supplierId, voidedAt: null, transactionAt: { lt: affectedAt } },
+    orderBy: [{ transactionAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: { balanceAfter: true },
+  });
+  if (previous) {
+    if (previous.balanceAfter === null) throw new HttpError(409, "Tedarikci onceki bakiyesi eksik");
+    return { supplierId, affectedAt, balance: previous.balanceAfter };
+  }
+
+  const first = await tx.supplierTransaction.findFirst({
+    where: { supplierId, voidedAt: null, transactionAt: { gte: affectedAt } },
+    orderBy: [{ transactionAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    select: { type: true, amount: true, balanceAfter: true },
+  });
+  if (!first) return { supplierId, affectedAt, balance: zero() };
+  if (first.balanceAfter === null) throw new HttpError(409, "Tedarikci acilis bakiyesi eksik");
+  return {
+    supplierId,
+    affectedAt,
+    balance: first.balanceAfter.minus(signedLedgerEffect(first.type, first.amount)),
+  };
+};
+
+const recalculateLedgerFrom = async (
+  tx: SupplierPaymentInput["tx"],
+  baseline: LedgerBaseline,
+) => {
+  const rows = await tx.supplierTransaction.findMany({
+    where: {
+      supplierId: baseline.supplierId,
+      voidedAt: null,
+      transactionAt: { gte: baseline.affectedAt },
+    },
+    orderBy: [{ transactionAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, type: true, amount: true, balanceAfter: true },
+  });
+  let balance = baseline.balance;
+  for (const row of rows) {
+    if (row.balanceAfter === null) {
+      throw new HttpError(409, "Tedarikci hareketlerinden birinin balanceAfter degeri eksik");
+    }
+    balance = balance.plus(signedLedgerEffect(row.type, row.amount));
+    if (!row.balanceAfter.equals(balance)) {
+      await tx.supplierTransaction.update({ where: { id: row.id }, data: { balanceAfter: balance } });
+    }
+  }
+};
+
+export const reconcileVehicleOperationSupplierPayment = async ({
+  tx,
+  operationId,
+  previous,
+  next,
+}: {
+  tx: SupplierPaymentInput["tx"];
+  operationId: string;
+  previous: VehicleOperationSupplierPaymentState | null;
+  next: VehicleOperationSupplierPaymentState | null;
+}) => {
+  if (!previous && !next) return;
+  const supplierIds = [previous?.supplierId, next?.supplierId].filter(
+    (value): value is string => Boolean(value),
+  );
+  await lockSuppliers(tx, supplierIds);
+
+  const affectedBySupplier = new Map<string, Date>();
+  for (const state of [previous, next]) {
+    if (!state) continue;
+    const current = affectedBySupplier.get(state.supplierId);
+    if (!current || state.transactionAt < current) affectedBySupplier.set(state.supplierId, state.transactionAt);
+  }
+  const baselines: LedgerBaseline[] = [];
+  for (const [supplierId, affectedAt] of affectedBySupplier) {
+    baselines.push(await resolveLedgerBaseline(tx, supplierId, affectedAt));
+  }
+
+  const active = await tx.supplierTransaction.findFirst({
+    where: { sourceType: "VEHICLE_OPERATION", sourceId: operationId, voidedAt: null },
+  });
+  if (previous && !active) throw new HttpError(409, "Operation supplier hareketi bulunamadi");
+  if (active && (active.type !== "PAYMENT" || active.balanceAfter === null)) {
+    throw new HttpError(409, "Operation supplier hareketi guvenle yorumlanamadi");
+  }
+  if (previous && active && active.supplierId !== previous.supplierId) {
+    throw new HttpError(409, "Operation supplier baglantisi ile ledger hareketi uyusmuyor");
+  }
+  if (active) {
+    await tx.supplierTransaction.update({ where: { id: active.id }, data: { voidedAt: new Date() } });
+  }
+
+  if (next) {
+    const supplier = await tx.supplier.findUnique({
+      where: { id: next.supplierId },
+      select: { currency: true, isActive: true },
+    });
+    if (!supplier?.isActive) throw new HttpError(409, "Supplier aktif degil");
+    if (supplier.currency !== next.currency) {
+      throw new HttpError(400, "Operation currency supplier currency ile ayni olmali");
+    }
+    await tx.supplierTransaction.create({
+      data: {
+        supplierId: next.supplierId,
+        type: "PAYMENT",
+        amount: next.amount,
+        currency: next.currency,
+        balanceAfter: zero(),
+        transactionAt: next.transactionAt,
+        sourceType: "VEHICLE_OPERATION",
+        sourceId: operationId,
+      },
+    });
+  }
+
+  for (const baseline of baselines) await recalculateLedgerFrom(tx, baseline);
 };

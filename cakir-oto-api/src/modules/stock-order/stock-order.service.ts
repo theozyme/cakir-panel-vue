@@ -6,7 +6,7 @@ import { getPrisma } from "../../lib/prisma.js";
 import type { BusinessTransaction } from "../../lib/transaction.js";
 import { withSerializableTransaction } from "../../lib/transaction.js";
 import { asRecord, oneOf, optionalString, requiredString } from "../../lib/validation.js";
-import { parseInventoryStockType } from "../inventory/inventory.service.js";
+import { inventoryStatus, parseInventoryStockType } from "../inventory/inventory.service.js";
 import type { InventoryStockType } from "../inventory/inventory.types.js";
 import type {
   StockOrderDto,
@@ -43,7 +43,14 @@ type ParsedOrderInput = {
 
 const includeOrder = {
   supplier: { select: { id: true, name: true, currency: true } },
-  items: { orderBy: { createdAt: "asc" as const } },
+  items: {
+    orderBy: { createdAt: "asc" as const },
+    include: {
+      multimediaProduct: { select: { quantity: true, criticalStockLevel: true } },
+      screenProduct: { select: { quantity: true, criticalStockLevel: true } },
+      soundSystemProduct: { select: { quantity: true, criticalStockLevel: true } },
+    },
+  },
 } as const;
 
 type OrderRow = Prisma.StockOrderGetPayload<{ include: typeof includeOrder }>;
@@ -324,6 +331,9 @@ const currency = (value: string): "TRY" | "USD" => {
 const productIdentity = (row: OrderRow["items"][number]): string | null =>
   row.multimediaProductId ?? row.screenProductId ?? row.soundSystemProductId;
 
+const currentInventory = (row: OrderRow["items"][number]) =>
+  row.multimediaProduct ?? row.screenProduct ?? row.soundSystemProduct;
+
 const snapshotRecord = (value: Prisma.JsonValue): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -362,19 +372,25 @@ const toDto = (row: OrderRow): StockOrderDto => {
     totalQuantity: row.items.reduce((sum, item) => sum + item.quantity, 0),
     totalAmount: moneyToString(total),
     stockTypes: [...new Set(row.items.map((item) => item.stockType))],
-    items: row.items.map((item, index) => ({
-      id: item.id,
-      stockType: item.stockType,
-      productId: productIdentity(item),
-      isNewProduct: item.isNewProduct,
-      productSnapshot: snapshots[index] ?? {},
-      productLabel: snapshotLabel(item.stockType, snapshots[index] ?? {}),
-      productCode:
-        typeof snapshots[index]?.code === "string" ? String(snapshots[index]?.code) : null,
-      quantity: item.quantity,
-      unitPrice: moneyToString(item.unitPrice),
-      totalPrice: moneyToString(item.totalPrice),
-    })),
+    items: row.items.map((item, index) => {
+      const inventory = currentInventory(item);
+      return {
+        id: item.id,
+        stockType: item.stockType,
+        productId: productIdentity(item),
+        isNewProduct: item.isNewProduct,
+        productSnapshot: snapshots[index] ?? {},
+        productLabel: snapshotLabel(item.stockType, snapshots[index] ?? {}),
+        productCode:
+          typeof snapshots[index]?.code === "string" ? String(snapshots[index]?.code) : null,
+        inventoryStatus: inventory
+          ? inventoryStatus(inventory.quantity, inventory.criticalStockLevel)
+          : null,
+        quantity: item.quantity,
+        unitPrice: moneyToString(item.unitPrice),
+        totalPrice: moneyToString(item.totalPrice),
+      };
+    }),
   };
 };
 

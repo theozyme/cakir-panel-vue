@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import {
-  confirmPendingVehicleController,
+  getPendingVehicleController,
   getPendingVehicles,
   postPendingVehicle,
 } from "./pending-vehicle.controller.js";
@@ -9,5 +9,5 @@ import {
 export const pendingVehicleRouter = Router();
 
 pendingVehicleRouter.get("/", getPendingVehicles);
+pendingVehicleRouter.get("/:id", getPendingVehicleController);
 pendingVehicleRouter.post("/", postPendingVehicle);
-pendingVehicleRouter.post("/:id/confirm", confirmPendingVehicleController);

@@ -5,6 +5,7 @@ import { Eye, LoaderCircle, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { VehicleOperationActions } from "@/components/shared/VehicleOperationActions";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,6 @@ import {
 import { apiRequest } from "@/lib/api";
 import { formatMoneyString } from "@/lib/money";
 import type {
-  CreateVehicleVisitResponse,
   PendingVehicle,
   VehicleLookupResponse,
   VehicleOperationHistoryItem,
@@ -118,19 +118,6 @@ function AraclarPage() {
         `/api/vehicles?search=${encodeURIComponent(debouncedVehicleSearch)}&limit=10`,
       ),
     enabled: newOperationOpen && debouncedVehicleSearch.length >= 2,
-  });
-
-  const createVisitMutation = useMutation({
-    mutationFn: (vehicleId: string) =>
-      apiRequest<CreateVehicleVisitResponse>(`/api/vehicles/${vehicleId}/visits`, {
-        method: "POST",
-      }),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["vehicle-history", result.vehicleId] });
-      setNewOperationOpen(false);
-      navigate({ to: "/araclar/yeni", search: { visitId: result.visitId } });
-    },
-    onError: (error: Error) => toast.error(error.message),
   });
 
   const createPendingMutation = useMutation({
@@ -242,14 +229,22 @@ function AraclarPage() {
                     {formatMoneyString(item.price, item.currency)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      to="/araclar/$vehicleId"
-                      params={{ vehicleId: item.vehicleId }}
-                      aria-label={`${item.plate} geçmişini görüntüle`}
-                      className="ml-auto grid h-8 w-8 place-items-center rounded-lg border border-input text-muted-foreground hover:text-foreground"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Link>
+                    <div className="flex items-center justify-end gap-1">
+                      <Link
+                        to="/araclar/$vehicleId"
+                        params={{ vehicleId: item.vehicleId }}
+                        aria-label={`${item.plate} geçmişini görüntüle`}
+                        className="grid h-8 w-8 place-items-center rounded-lg border border-input text-muted-foreground hover:text-foreground"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Link>
+                      <VehicleOperationActions
+                        operationId={item.operationId}
+                        revision={item.revision}
+                        hasStockImpact={item.hasStockImpact}
+                        hasMailOrderImpact={item.hasMailOrderImpact}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -330,8 +325,10 @@ function AraclarPage() {
                 <button
                   key={vehicle.vehicleId}
                   type="button"
-                  disabled={createVisitMutation.isPending}
-                  onClick={() => createVisitMutation.mutate(vehicle.vehicleId)}
+                  onClick={() => {
+                    setNewOperationOpen(false);
+                    navigate({ to: "/araclar/yeni", search: { vehicleId: vehicle.vehicleId } });
+                  }}
                   className="flex w-full items-center justify-between rounded-lg border border-border/60 p-3 text-left hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50"
                 >
                   <span>

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, Fragment, type ReactNode } from "react";
+import { useEffect, useState, Fragment, type ReactNode } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -27,16 +27,16 @@ import {
 } from "recharts";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { formatTRY } from "@/components/shared/StatusBadge";
-import { dailyEarnings } from "@/data/mock";
 import { apiRequest } from "@/lib/api";
 import { formatMoneyString } from "@/lib/money";
 import type {
-  ConfirmPendingVehicleResponse,
+  Currency,
   DailyVehicleOperationResponse,
   DailyVehicleVisit,
   PendingVehicle,
 } from "@/types/business";
 import type { InventoryListResponse, InventoryStockType } from "@/types/inventory";
+import type { DashboardFinance, DashboardPaymentPeriod } from "@/types/reports";
 
 interface DashboardMetricProps {
   label: string;
@@ -83,11 +83,19 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-const paymentDistribution = [
-  { name: "Nakit", value: 32000, color: "var(--color-chart-2)" },
-  { name: "Kredi Kartı", value: 58000, color: "var(--color-chart-1)" },
-  { name: "Havale", value: 41000, color: "var(--color-chart-5)" },
-  { name: "Mail Order", value: 22000, color: "var(--color-chart-3)" },
+const paymentMethodColors: Record<string, string> = {
+  CASH: "var(--color-chart-2)",
+  CREDIT_CARD: "var(--color-chart-1)",
+  BANK_TRANSFER: "var(--color-chart-5)",
+  MAIL_ORDER: "var(--color-chart-3)",
+};
+
+const paymentPeriodOptions: Array<{ value: DashboardPaymentPeriod; label: string }> = [
+  { value: "today", label: "Bugün" },
+  { value: "month", label: "Bu ay" },
+  { value: "30d", label: "Son 30 gün" },
+  { value: "90d", label: "Son 90 gün" },
+  { value: "1y", label: "Son 1 yıl" },
 ];
 
 const getTodayDateKey = () => {
@@ -131,11 +139,44 @@ const formatTotals = (totals?: { TRY: string; USD: string }) => {
   return parts.length > 0 ? parts.join(" / ") : formatTRY(0);
 };
 
+function FinanceCurrencySelector({
+  value,
+  hasUsd,
+  onChange,
+}: {
+  value: Currency;
+  hasUsd: boolean;
+  onChange: (currency: Currency) => void;
+}) {
+  if (!hasUsd) return null;
+
+  return (
+    <div className="inline-flex rounded-md border border-input bg-background p-0.5">
+      {(["TRY", "USD"] as const).map((currency) => (
+        <button
+          key={currency}
+          type="button"
+          onClick={() => onChange(currency)}
+          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors ${
+            value === currency
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {currency}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [plaka, setPlaka] = useState("");
   const [selectedDate, setSelectedDate] = useState(getTodayDateKey);
+  const [financeCurrency, setFinanceCurrency] = useState<Currency>("TRY");
+  const [paymentPeriod, setPaymentPeriod] = useState<DashboardPaymentPeriod>("month");
   const [expandedVisitId, setExpandedVisitId] = useState<string | null>(null);
   const pendingQuery = useQuery({
     queryKey: ["pending-vehicles"],
@@ -145,6 +186,14 @@ function Dashboard() {
     queryKey: ["vehicle-operations", selectedDate],
     queryFn: () =>
       apiRequest<DailyVehicleOperationResponse>(`/api/vehicle-operations?date=${selectedDate}`),
+  });
+  const dashboardFinanceQuery = useQuery({
+    queryKey: ["reports", "dashboard", selectedDate, paymentPeriod],
+    queryFn: () =>
+      apiRequest<DashboardFinance>(
+        `/api/reports/dashboard?date=${selectedDate}&paymentPeriod=${paymentPeriod}`,
+      ),
+    placeholderData: (previousData) => previousData,
   });
   const criticalStockQueries = useQueries({
     queries: (["MULTIMEDIA", "SCREEN", "SOUND_SYSTEM"] as InventoryStockType[]).map((type) => ({
@@ -168,18 +217,6 @@ function Dashboard() {
     },
     onError: (error: Error) => toast.error(error.message),
   });
-  const confirmPendingMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest<ConfirmPendingVehicleResponse>(`/api/pending-vehicles/${id}/confirm`, {
-        method: "POST",
-      }),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["pending-vehicles"] });
-      void queryClient.invalidateQueries({ queryKey: ["vehicle-operations"] });
-      navigate({ to: "/araclar/yeni", search: { visitId: result.visitId } });
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
   const dailyData = dailyQuery.data;
   const dailyLoading = dailyQuery.isLoading;
   const dailyError = dailyQuery.error instanceof Error ? dailyQuery.error.message : null;
@@ -188,9 +225,33 @@ function Dashboard() {
   const bugun = dailyData?.summary.totalVehicles ?? 0;
   const totalOperationsValue = dailyLoading ? "-" : (dailyData?.summary.totalOperations ?? 0);
   const dailyEarningsValue = dailyLoading ? "-" : formatTotals(dailyData?.summary.totalsByCurrency);
+  const dashboardFinance = dashboardFinanceQuery.data;
+  const financeHasUsd = Boolean(
+    dashboardFinance &&
+    [
+      ...dashboardFinance.dailyEarnings.map((item) => item.amounts.USD),
+      ...dashboardFinance.paymentMethods.map((item) => item.amounts.USD),
+    ].some((value) => Number(value) !== 0),
+  );
+  const dailyEarningsChart = (dashboardFinance?.dailyEarnings ?? []).map((item) => ({
+    day: item.label,
+    earnings: Number(item.amounts[financeCurrency]),
+  }));
+  const paymentDistribution = (dashboardFinance?.paymentMethods ?? [])
+    .map((item) => ({
+      key: item.key,
+      name: item.label,
+      value: Number(item.amounts[financeCurrency]),
+      color: paymentMethodColors[item.key] ?? "var(--color-muted-foreground)",
+    }))
+    .filter((item) => item.value !== 0);
   const kritikStok = criticalStockQueries.some((query) => query.isLoading)
     ? "-"
     : criticalStockQueries.reduce((total, query) => total + (query.data?.total ?? 0), 0);
+
+  useEffect(() => {
+    if (!financeHasUsd) setFinanceCurrency("TRY");
+  }, [financeHasUsd]);
 
   return (
     <AppLayout title="Ana Sayfa">
@@ -305,8 +366,9 @@ function Dashboard() {
                 </div>
                 <button
                   type="button"
-                  disabled={confirmPendingMutation.isPending}
-                  onClick={() => confirmPendingMutation.mutate(v.id)}
+                  onClick={() =>
+                    navigate({ to: "/araclar/yeni", search: { pendingVehicleId: v.id } })
+                  }
                   className="inline-flex h-9 items-center rounded-lg border border-warning/40 px-3 text-xs font-semibold text-warning hover:bg-warning/10 disabled:opacity-50"
                 >
                   İşleme Al
@@ -472,75 +534,128 @@ function Dashboard() {
         <div className="card-elevated p-4 md:p-5">
           <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-3">
             <h2 className="text-base font-bold">Günlük Kazanç</h2>
-            <span className="text-xs text-muted-foreground">Son 7 gün</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Son 7 gün</span>
+              <FinanceCurrencySelector
+                value={financeCurrency}
+                hasUsd={financeHasUsd}
+                onChange={setFinanceCurrency}
+              />
+            </div>
           </div>
           <div className="h-40">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyEarnings}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="gun"
-                  stroke="var(--color-muted-foreground)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="var(--color-muted-foreground)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => `${v / 1000}k`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 8,
-                  }}
-                  formatter={(v: number) => formatTRY(v)}
-                />
-                <Bar dataKey="kazanc" fill="var(--color-primary)" radius={[5, 5, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {dashboardFinanceQuery.isLoading ? (
+              <div className="h-full animate-pulse rounded-lg bg-muted" />
+            ) : dashboardFinanceQuery.error instanceof Error ? (
+              <div className="grid h-full place-items-center text-sm text-destructive">
+                {dashboardFinanceQuery.error.message}
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dailyEarningsChart}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="day"
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="var(--color-muted-foreground)"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${Number(value) / 1000}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--color-card)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 8,
+                    }}
+                    formatter={(value: number) =>
+                      formatMoneyString(value.toFixed(2), financeCurrency)
+                    }
+                  />
+                  <Bar dataKey="earnings" fill="var(--color-primary)" radius={[5, 5, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
         <div className="card-elevated p-4 md:p-5">
           <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-3">
             <h2 className="text-base font-bold">Ödeme Dağılımı</h2>
-            <span className="text-xs text-muted-foreground">Bu ay</span>
+            <div className="flex items-center gap-2">
+              <select
+                aria-label="Ödeme dağılımı dönemi"
+                value={paymentPeriod}
+                onChange={(event) => setPaymentPeriod(event.target.value as DashboardPaymentPeriod)}
+                className="h-7 rounded-md border border-input bg-background px-2 text-[11px] font-medium outline-none focus:border-primary"
+              >
+                {paymentPeriodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <FinanceCurrencySelector
+                value={financeCurrency}
+                hasUsd={financeHasUsd}
+                onChange={setFinanceCurrency}
+              />
+            </div>
           </div>
           <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={paymentDistribution}
-                  dataKey="value"
-                  innerRadius={45}
-                  outerRadius={75}
-                  paddingAngle={3}
-                >
-                  {paymentDistribution.map((p, i) => (
-                    <Cell key={i} fill={p.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => formatTRY(v)} />
-              </PieChart>
-            </ResponsiveContainer>
+            {dashboardFinanceQuery.isLoading ? (
+              <div className="h-full animate-pulse rounded-lg bg-muted" />
+            ) : dashboardFinanceQuery.error instanceof Error ? (
+              <div className="grid h-full place-items-center text-sm text-destructive">
+                {dashboardFinanceQuery.error.message}
+              </div>
+            ) : paymentDistribution.length === 0 ? (
+              <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                Seçili dönemde ödeme kaydı yok.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={paymentDistribution}
+                    dataKey="value"
+                    innerRadius={45}
+                    outerRadius={75}
+                    paddingAngle={3}
+                  >
+                    {paymentDistribution.map((item) => (
+                      <Cell key={item.key} fill={item.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) =>
+                      formatMoneyString(value.toFixed(2), financeCurrency)
+                    }
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
           <div className="mt-1 space-y-2 border-t border-border/70 pt-3">
             {paymentDistribution.map((p) => (
-              <div key={p.name} className="flex items-center justify-between text-xs">
+              <div key={p.key} className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} />
                   {p.name}
                 </span>
-                <span className="font-semibold">{formatTRY(p.value)}</span>
+                <span className="font-semibold">
+                  {formatMoneyString(p.value.toFixed(2), financeCurrency)}
+                </span>
               </div>
             ))}
           </div>

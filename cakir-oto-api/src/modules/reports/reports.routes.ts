@@ -1,7 +1,8 @@
 import { Router } from "express";
 
-import { getOverview } from "./reports.controller.js";
+import { getDashboard, getOverview } from "./reports.controller.js";
 
 export const reportsRouter = Router();
 
+reportsRouter.get("/dashboard", getDashboard);
 reportsRouter.get("/overview", getOverview);

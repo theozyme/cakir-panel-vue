@@ -20,6 +20,16 @@ export type VehicleLookupResponse = {
   items: VehicleLookupItem[];
 };
 
+export type VehicleIntakeContext = {
+  vehicle: {
+    id: string;
+    plate: string;
+    brand: string | null;
+    model: string | null;
+  };
+  customer: VehicleCustomerSummary | null;
+};
+
 export type VehicleHistoryOperation = {
   operationId: string;
   description: string;
@@ -29,6 +39,7 @@ export type VehicleHistoryOperation = {
   paymentMethod: string;
   operationAt: string;
   note: string | null;
+  revision: number;
   multimediaProduct: {
     id: string;
     code: string;

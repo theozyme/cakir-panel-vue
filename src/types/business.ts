@@ -7,14 +7,6 @@ export type PendingVehicle = {
   createdAt: string;
 };
 
-export type ConfirmPendingVehicleResponse = {
-  pendingVehicleId: string;
-  visitId: string;
-  vehicleId: string;
-  plate: string;
-  arrivalAt: string;
-};
-
 export type VehicleVisitDetail = {
   id: string;
   arrivalAt: string;
@@ -135,6 +127,7 @@ export type SupplierTransaction = {
   note: string | null;
   sourceType: "MANUAL" | "VEHICLE_OPERATION" | "MIGRATION";
   sourceId: string | null;
+  voidedAt: string | null;
 };
 
 export type MailOrderTrendItem = {
@@ -214,6 +207,9 @@ export type VehicleOperationHistoryItem = {
   currency: Currency;
   operationAt: string;
   note: string | null;
+  revision: number;
+  hasStockImpact: boolean;
+  hasMailOrderImpact: boolean;
 };
 
 export type VehicleOperationHistoryResponse = {
@@ -244,10 +240,41 @@ export type VehicleLookupItem = {
 
 export type VehicleLookupResponse = { items: VehicleLookupItem[] };
 
-export type CreateVehicleVisitResponse = {
+export type VehicleIntakeContext = {
+  vehicle: { id: string; plate: string; brand: string | null; model: string | null };
+  customer: VehicleCustomerSummary | null;
+};
+
+export type VehicleOperationDetail = {
+  id: string;
   visitId: string;
   vehicleId: string;
-  arrivalAt: string;
+  plate: string;
+  operationType: OperationType | null;
+  description: string;
+  price: string;
+  currency: Currency;
+  paymentMethod: PaymentMethod;
+  operationAt: string;
+  note: string | null;
+  soundOfferId: string | null;
+  multimediaProductId: string | null;
+  screenProductId: string | null;
+  mailOrderSupplierId: string | null;
+  multimediaProduct: { id: string; code: string; brand: string | null; model: string | null } | null;
+  screenProduct: { id: string; brand: string; sizeLabel: string | null } | null;
+  soundOffer: { id: string; status: string; saleType: string } | null;
+  mailOrderSupplier: { id: string; name: string; currency: string } | null;
+  revision: number;
+  hasStockImpact: boolean;
+  hasMailOrderImpact: boolean;
+  vehicle: { brand: string | null; model: string | null };
+  customer: {
+    firstName: string | null;
+    lastName: string | null;
+    phone: string | null;
+    note: string | null;
+  } | null;
 };
 
 export type VehicleHistoryOperation = {
@@ -259,6 +286,7 @@ export type VehicleHistoryOperation = {
   paymentMethod: string;
   operationAt: string;
   note: string | null;
+  revision: number;
   multimediaProduct: {
     id: string;
     code: string;

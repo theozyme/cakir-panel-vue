@@ -49,6 +49,7 @@ export type SupplierTransactionDto = {
   note: string | null;
   sourceType: SupplierTransactionSourceType;
   sourceId: string | null;
+  voidedAt: string | null;
 };
 
 export type TrendCurrencyValues = {
@@ -73,6 +74,13 @@ export type SupplierPaymentInput = {
   tx: BusinessTransaction;
   supplierId: string;
   operationId: string;
+  amount: Prisma.Decimal;
+  currency: string;
+  transactionAt: Date;
+};
+
+export type VehicleOperationSupplierPaymentState = {
+  supplierId: string;
   amount: Prisma.Decimal;
   currency: string;
   transactionAt: Date;

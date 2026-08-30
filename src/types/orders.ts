@@ -1,13 +1,8 @@
-import type { InventoryStockType } from "@/types/inventory";
+import type { InventoryStatus, InventoryStockType } from "@/types/inventory";
 
 export type OrderStatus = "DRAFT" | "ORDERED" | "RECEIVED" | "CANCELLED";
 export type OrderPaymentStatus = "UNPAID" | "PARTIAL" | "PAID";
-export type OrderPaymentMethod =
-  | "CASH"
-  | "CREDIT_CARD"
-  | "BANK_TRANSFER"
-  | "CHECK"
-  | "TERM";
+export type OrderPaymentMethod = "CASH" | "CREDIT_CARD" | "BANK_TRANSFER" | "CHECK" | "TERM";
 
 export type Supplier = {
   id: string;
@@ -23,6 +18,7 @@ export type StockOrderItem = {
   productSnapshot: Record<string, unknown>;
   productLabel: string;
   productCode: string | null;
+  inventoryStatus: InventoryStatus | null;
   quantity: number;
   unitPrice: string;
   totalPrice: string;

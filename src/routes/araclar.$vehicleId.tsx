@@ -1,13 +1,12 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Car, LoaderCircle, Plus } from "lucide-react";
-import { toast } from "sonner";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Car, Plus } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { VehicleOperationActions } from "@/components/shared/VehicleOperationActions";
 import { apiRequest } from "@/lib/api";
 import { formatMoneyString } from "@/lib/money";
 import type {
-  CreateVehicleVisitResponse,
   VehicleCustomerSummary,
   VehicleHistoryOperation,
   VehicleHistoryResponse,
@@ -150,22 +149,9 @@ function ProductDetails({ operation }: { operation: VehicleHistoryOperation }) {
 
 function VehicleHistoryPage() {
   const { vehicleId } = Route.useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const historyQuery = useQuery({
     queryKey: ["vehicle-history", vehicleId],
     queryFn: () => apiRequest<VehicleHistoryResponse>(`/api/vehicles/${vehicleId}/history`),
-  });
-  const createVisitMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<CreateVehicleVisitResponse>(`/api/vehicles/${vehicleId}/visits`, {
-        method: "POST",
-      }),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["vehicle-history", vehicleId] });
-      navigate({ to: "/araclar/yeni", search: { visitId: result.visitId } });
-    },
-    onError: (error: Error) => toast.error(error.message),
   });
 
   if (historyQuery.isLoading) {
@@ -198,19 +184,14 @@ function VehicleHistoryPage() {
         >
           <ArrowLeft className="h-4 w-4" /> Araç İşlemleri
         </Link>
-        <button
-          type="button"
-          disabled={createVisitMutation.isPending}
-          onClick={() => createVisitMutation.mutate()}
+        <Link
+          to="/araclar/yeni"
+          search={{ vehicleId }}
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
         >
-          {createVisitMutation.isPending ? (
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
+          <Plus className="h-4 w-4" />
           Yeni İşlem Ekle
-        </button>
+        </Link>
       </div>
 
       <section className="card-elevated mb-4 flex flex-wrap items-center gap-4 p-5">
@@ -281,6 +262,17 @@ function VehicleHistoryPage() {
                         {formatDateTime(operation.operationAt)}
                       </div>
                     </div>
+                  </div>
+                  <div className="mt-3">
+                    <VehicleOperationActions
+                      operationId={operation.operationId}
+                      revision={operation.revision}
+                      hasStockImpact={
+                        operation.operationType === "MULTIMEDIA" ||
+                        operation.operationType === "SOUND_SYSTEM"
+                      }
+                      hasMailOrderImpact={operation.paymentMethod === "MAIL_ORDER"}
+                    />
                   </div>
                   {operation.note && (
                     <div className="mt-3 rounded-lg border border-border/60 p-3 text-sm text-muted-foreground">
