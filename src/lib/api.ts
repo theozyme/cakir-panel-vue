@@ -12,15 +12,13 @@ export class ApiError extends Error {
 }
 
 export const apiFetch = async (path: string, init?: RequestInit): Promise<Response> => {
-  const method = (init?.method ?? "GET").toUpperCase();
-  const changesState = !["GET", "HEAD", "OPTIONS"].includes(method);
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     credentials: "include",
     headers: {
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...(changesState ? { "X-App-Request": "cakir-panel" } : {}),
       ...init?.headers,
+      "X-App-Request": "cakir-panel",
     },
   });
 
