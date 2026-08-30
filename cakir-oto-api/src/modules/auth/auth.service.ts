@@ -93,10 +93,11 @@ export const readCookie = (header: string | undefined, name: string): string | u
 export const sessionCookieOptions = () => ({
   httpOnly: true,
   secure:
-    process.env.AUTH_COOKIE_SECURE !== undefined
+    process.env.NODE_ENV === "production" ||
+    (process.env.AUTH_COOKIE_SECURE !== undefined
       ? process.env.AUTH_COOKIE_SECURE === "true"
-      : process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+      : false),
+  sameSite: process.env.NODE_ENV === "production" ? ("none" as const) : ("lax" as const),
   path: "/",
   maxAge: SESSION_DURATION_MS,
 });
