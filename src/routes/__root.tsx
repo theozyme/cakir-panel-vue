@@ -4,12 +4,15 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useNavigate,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -78,11 +81,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Çakır Oto Yönetim Paneli" },
+      { name: "description", content: "Çakır Oto yönetim paneli." },
+      { name: "author", content: "Çakır Oto" },
+      { property: "og:title", content: "Çakır Oto Yönetim Paneli" },
+      { property: "og:description", content: "Çakır Oto yönetim paneli." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
@@ -120,9 +123,41 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
       <Toaster richColors position="top-right" />
     </QueryClientProvider>
   );
+}
+
+function AuthGate() {
+  const { status } = useAuth();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const navigate = useNavigate();
+  const isLoginPage = pathname === "/login";
+
+  useEffect(() => {
+    if (status === "unauthenticated" && !isLoginPage) {
+      void navigate({ to: "/login", replace: true });
+    } else if (status === "authenticated" && isLoginPage) {
+      void navigate({ to: "/", replace: true });
+    }
+  }, [isLoginPage, navigate, status]);
+
+  const canRender =
+    (status === "authenticated" && !isLoginPage) || (status === "unauthenticated" && isLoginPage);
+
+  if (!canRender) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          Oturum kontrol ediliyor...
+        </div>
+      </div>
+    );
+  }
+
+  return <Outlet />;
 }

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AraclarRouteImport } from './routes/araclar'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as MailOrderRouteImport } from './routes/mail-order'
 import { Route as OzelOdemelerRouteImport } from './routes/ozel-odemeler'
 import { Route as RaporlarRouteImport } from './routes/raporlar'
@@ -36,6 +37,11 @@ const IndexRoute = IndexRouteImport.update({
 const AraclarRoute = AraclarRouteImport.update({
   id: '/araclar',
   path: '/araclar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MailOrderRoute = MailOrderRouteImport.update({
@@ -122,6 +128,7 @@ const StokSiparislerRoute = StokSiparislerRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/araclar': typeof AraclarRouteWithChildren
+  '/login': typeof LoginRoute
   '/mail-order': typeof MailOrderRoute
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
@@ -141,6 +148,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/mail-order': typeof MailOrderRoute
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/araclar': typeof AraclarRouteWithChildren
+  '/login': typeof LoginRoute
   '/mail-order': typeof MailOrderRoute
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
@@ -182,6 +191,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/araclar'
+    | '/login'
     | '/mail-order'
     | '/ozel-odemeler'
     | '/raporlar'
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
     | '/mail-order'
     | '/ozel-odemeler'
     | '/raporlar'
@@ -219,6 +230,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/araclar'
+    | '/login'
     | '/mail-order'
     | '/ozel-odemeler'
     | '/raporlar'
@@ -240,6 +252,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AraclarRoute: typeof AraclarRouteWithChildren
+  LoginRoute: typeof LoginRoute
   MailOrderRoute: typeof MailOrderRoute
   OzelOdemelerRoute: typeof OzelOdemelerRoute
   RaporlarRoute: typeof RaporlarRoute
@@ -263,6 +276,13 @@ declare module '@tanstack/react-router' {
       path: '/araclar'
       fullPath: '/araclar'
       preLoaderRoute: typeof AraclarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mail-order': {
@@ -428,6 +448,7 @@ const StokRouteWithChildren = StokRoute._addFileChildren(StokRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AraclarRoute: AraclarRouteWithChildren,
+  LoginRoute: LoginRoute,
   MailOrderRoute: MailOrderRoute,
   OzelOdemelerRoute: OzelOdemelerRoute,
   RaporlarRoute: RaporlarRoute,

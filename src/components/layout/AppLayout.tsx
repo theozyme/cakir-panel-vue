@@ -12,9 +12,11 @@ import {
   Search,
   Bell,
   Menu,
+  LogOut,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 const navItems = [
   { to: "/", label: "Ana Sayfa", icon: LayoutDashboard },
@@ -30,12 +32,23 @@ const navItems = [
 export function AppLayout({ children, title }: { children: ReactNode; title?: string }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { logout, username } = useAuth();
 
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
   const isActive = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
@@ -63,9 +76,23 @@ export function AppLayout({ children, title }: { children: ReactNode; title?: st
               <Bell className="h-4 w-4" />
               <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
             </button>
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+            <div
+              title={username ?? "Kullanıcı"}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+            >
               ÇO
             </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              title="Çıkış yap"
+              aria-label="Çıkış yap"
+              className="hidden h-9 items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50 sm:flex"
+            >
+              <LogOut className="h-4 w-4" />
+              Çıkış
+            </button>
             <button
               onClick={() => setOpen((v) => !v)}
               aria-label="Menü"
@@ -119,6 +146,15 @@ export function AppLayout({ children, title }: { children: ReactNode; title?: st
                 </Link>
               );
             })}
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="mt-2 flex w-full items-center gap-3 rounded-lg border border-white/10 px-3 py-2.5 text-sm font-medium text-white/75 hover:bg-white/5 hover:text-white disabled:opacity-50 sm:hidden"
+            >
+              <LogOut className="h-4 w-4" />
+              Çıkış yap
+            </button>
           </nav>
         )}
       </header>

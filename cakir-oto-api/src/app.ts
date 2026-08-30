@@ -17,11 +17,30 @@ import { supplierRouter } from "./modules/supplier/supplier.routes.js";
 import { vehicleOperationRouter } from "./modules/vehicle-operation/vehicle-operation.routes.js";
 import { vehicleVisitRouter } from "./modules/vehicle-visit/vehicle-visit.routes.js";
 import { vehicleRouter } from "./modules/vehicle/vehicle.routes.js";
+import { authRouter } from "./modules/auth/auth.routes.js";
+import { requireAppRequest, requireAuthentication } from "./modules/auth/auth.middleware.js";
 
 export const app = express();
 
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = new Set(
+  (process.env.APP_ORIGIN ?? "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
+
+app.disable("x-powered-by");
+app.use(
+  cors({
+    origin(origin, callback) {
+      callback(null, !origin || allowedOrigins.has(origin));
+    },
+    credentials: true,
+    allowedHeaders: ["Content-Type", "X-App-Request", "X-Filename"],
+  }),
+);
+app.use(express.json({ limit: "1mb" }));
+app.use("/api", requireAppRequest);
 
 app.get("/api/health", (_req: Request, res: Response) => {
   res.json({
@@ -30,6 +49,8 @@ app.get("/api/health", (_req: Request, res: Response) => {
   });
 });
 
+app.use("/api/auth", authRouter);
+app.use("/api", requireAuthentication);
 app.use("/api/admin/migration", migrationRouter);
 app.use("/api/pending-vehicles", pendingVehicleRouter);
 app.use("/api/vehicle-visits", vehicleVisitRouter);
@@ -55,10 +76,11 @@ app.use((_req: Request, res: Response) => {
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   const statusCode = typeof err?.statusCode === "number" ? err.statusCode : 500;
+  if (statusCode >= 500) console.error(err);
 
   res.status(statusCode).json({
     success: false,
-    message: err?.message ?? "Sunucu hatası",
+    message: statusCode >= 500 ? "Sunucu hatası" : (err?.message ?? "İstek işlenemedi"),
   });
 };
 

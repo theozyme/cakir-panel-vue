@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { apiFetch } from "@/lib/api";
 
 export const Route = createFileRoute("/admin/migration")({
   head: () => ({
@@ -214,11 +215,7 @@ type SelectedFile = {
   rows:
     | SupplierMasterRows
     | Array<
-        | ScreenStockRow
-        | MultimediaStockRow
-        | SoundStockRow
-        | SoundOfferRow
-        | SupplierTransactionRow
+        ScreenStockRow | MultimediaStockRow | SoundStockRow | SoundOfferRow | SupplierTransactionRow
       >;
 };
 
@@ -287,8 +284,6 @@ const migrationTypes = [
   },
 ] as const;
 type MigrationType = (typeof migrationTypes)[number]["value"];
-const apiBaseUrl = import.meta.env.VITE_API_URL;
-
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -335,7 +330,7 @@ const readJsonFile = async (file: File, type: MigrationType): Promise<SelectedFi
 };
 
 const postMigration = async <TResponse,>(path: string, payload: unknown) => {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -355,7 +350,7 @@ const postMigration = async <TResponse,>(path: string, payload: unknown) => {
 };
 
 const postZipMigration = async <TResponse,>(path: string, file: File) => {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/zip",
@@ -439,14 +434,16 @@ function AdminMigrationPage() {
   const isVehicleHistory = selectedType === "vehicle-history";
   const isSpecialPayments = selectedType === "special-payments";
   const usesZip = isVehicleHistory || isSpecialPayments;
-  const canImport = Boolean(file && dryRunResult && !isBusy && (!requiresSupplier || selectedSupplierId));
+  const canImport = Boolean(
+    file && dryRunResult && !isBusy && (!requiresSupplier || selectedSupplierId),
+  );
   const previewRows = useMemo(() => dryRunResult?.preview.slice(0, 50) ?? [], [dryRunResult]);
   const selectedFileRowCount = file
     ? usesZip
       ? null
       : Array.isArray(file.rows)
-      ? file.rows.length
-      : Object.keys(file.rows).length
+        ? file.rows.length
+        : Object.keys(file.rows).length
     : 0;
 
   useEffect(() => {
@@ -458,7 +455,7 @@ function AdminMigrationPage() {
       setIsLoadingSuppliers(true);
 
       try {
-        const response = await fetch(`${apiBaseUrl}/api/admin/migration/suppliers`);
+        const response = await apiFetch("/api/admin/migration/suppliers");
         const data = (await response.json().catch(() => null)) as SupplierListItem[] | null;
 
         if (!response.ok) {
@@ -467,7 +464,9 @@ function AdminMigrationPage() {
 
         if (!ignore) {
           setSuppliers(Array.isArray(data) ? data : []);
-          setSelectedSupplierId((current) => current || (Array.isArray(data) ? data[0]?.id ?? "" : ""));
+          setSelectedSupplierId(
+            (current) => current || (Array.isArray(data) ? (data[0]?.id ?? "") : ""),
+          );
         }
       } catch (error) {
         if (!ignore) {
@@ -703,9 +702,20 @@ function AdminMigrationPage() {
               {isSpecialPayments ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <ResultCard label="Dosya" value={dryRunResult.totalFiles ?? 0} />
-                  <ResultCard label="Geçerli Dosya" value={dryRunResult.validFiles ?? 0} tone="success" />
-                  <ResultCard label="Hatalı Dosya" value={dryRunResult.invalidFiles ?? 0} tone="destructive" />
-                  <ResultCard label="Personel Ödemesi" value={dryRunResult.personnelPayments ?? 0} />
+                  <ResultCard
+                    label="Geçerli Dosya"
+                    value={dryRunResult.validFiles ?? 0}
+                    tone="success"
+                  />
+                  <ResultCard
+                    label="Hatalı Dosya"
+                    value={dryRunResult.invalidFiles ?? 0}
+                    tone="destructive"
+                  />
+                  <ResultCard
+                    label="Personel Ödemesi"
+                    value={dryRunResult.personnelPayments ?? 0}
+                  />
                   <ResultCard label="Kredi Ödemesi" value={dryRunResult.loanPayments ?? 0} />
                   <ResultCard label="Fatura Ödemesi" value={dryRunResult.invoicePayments ?? 0} />
                   <ResultCard label="Gider Kaydı" value={dryRunResult.expenseRecords ?? 0} />
@@ -716,18 +726,42 @@ function AdminMigrationPage() {
                     value={dryRunResult.skippedCustomRecords ?? 0}
                     tone="warning"
                   />
-                  <ResultCard label="Uyarı" value={dryRunResult.warnings?.length ?? 0} tone="warning" />
+                  <ResultCard
+                    label="Uyarı"
+                    value={dryRunResult.warnings?.length ?? 0}
+                    tone="warning"
+                  />
                   <ResultCard label="Hata" value={dryRunResult.errors.length} tone="destructive" />
                 </div>
               ) : isVehicleHistory ? (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <ResultCard label="Dosya" value={dryRunResult.totalFiles ?? 0} />
-                  <ResultCard label="Geçerli Dosya" value={dryRunResult.validFiles ?? 0} tone="success" />
-                  <ResultCard label="Hatalı Dosya" value={dryRunResult.invalidFiles ?? 0} tone="destructive" />
-                  <ResultCard label="Atlanan Dosya" value={dryRunResult.skippedFiles ?? 0} tone="warning" />
+                  <ResultCard
+                    label="Geçerli Dosya"
+                    value={dryRunResult.validFiles ?? 0}
+                    tone="success"
+                  />
+                  <ResultCard
+                    label="Hatalı Dosya"
+                    value={dryRunResult.invalidFiles ?? 0}
+                    tone="destructive"
+                  />
+                  <ResultCard
+                    label="Atlanan Dosya"
+                    value={dryRunResult.skippedFiles ?? 0}
+                    tone="warning"
+                  />
                   <ResultCard label="Araç" value={dryRunResult.totalVehicles ?? 0} />
-                  <ResultCard label="Yeni Araç" value={dryRunResult.newVehicles ?? 0} tone="success" />
-                  <ResultCard label="Mevcut Araç" value={dryRunResult.existingVehicles ?? 0} tone="warning" />
+                  <ResultCard
+                    label="Yeni Araç"
+                    value={dryRunResult.newVehicles ?? 0}
+                    tone="success"
+                  />
+                  <ResultCard
+                    label="Mevcut Araç"
+                    value={dryRunResult.existingVehicles ?? 0}
+                    tone="warning"
+                  />
                   <ResultCard label="Ziyaret" value={dryRunResult.totalVisits ?? 0} />
                   <ResultCard label="İşlem" value={dryRunResult.totalOperations ?? 0} />
                 </div>
@@ -809,9 +843,7 @@ function AdminMigrationPage() {
                                 <td className="px-4 py-3 font-semibold">
                                   {warning.offerIndex + 1}
                                 </td>
-                                <td className="px-4 py-3 font-semibold">
-                                  {warning.itemIndex + 1}
-                                </td>
+                                <td className="px-4 py-3 font-semibold">{warning.itemIndex + 1}</td>
                                 <td className="px-4 py-3 text-muted-foreground">
                                   {warning.productName}
                                 </td>
@@ -871,10 +903,14 @@ function AdminMigrationPage() {
                               <td className="px-4 py-3 font-semibold">{row.section}</td>
                               <td className="px-4 py-3">{row.masterName ?? "-"}</td>
                               <td className="px-4 py-3">{row.date ?? "-"}</td>
-                              <td className="px-4 py-3 text-right font-bold">{row.amount ?? "-"}</td>
+                              <td className="px-4 py-3 text-right font-bold">
+                                {row.amount ?? "-"}
+                              </td>
                               <td className="px-4 py-3">{row.description ?? "-"}</td>
                               <td className="px-4 py-3">
-                                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>
+                                <span
+                                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}
+                                >
                                   {row.status}
                                 </span>
                               </td>
