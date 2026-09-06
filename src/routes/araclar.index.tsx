@@ -5,6 +5,7 @@ import { Eye, LoaderCircle, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { Input } from "@/components/ui/input";
 import { VehicleOperationActions } from "@/components/shared/VehicleOperationActions";
 import {
   Dialog,
@@ -148,7 +149,8 @@ function AraclarPage() {
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
+            <Input
+              businessText
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Plaka veya müşteri ara..."
