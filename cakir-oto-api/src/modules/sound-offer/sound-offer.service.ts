@@ -90,7 +90,7 @@ export const createSoundOffer = async (body: unknown): Promise<SoundOfferDto> =>
     const products = await tx.soundSystemProduct.findMany({
       where: {
         id: { in: input.items.map((item) => item.productId) },
-        isActive: true,
+        isActive: true, deletedAt: null,
       },
     });
     const productMap = new Map(products.map((product) => [product.id, product]));

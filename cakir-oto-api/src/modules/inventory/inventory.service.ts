@@ -71,7 +71,19 @@ export const inventoryStatus = (quantity: number, criticalStockLevel: number): I
 };
 
 const activeWhere = (active: InventoryActiveFilter) =>
-  active === "all" ? {} : { isActive: active === "true" };
+  ({ deletedAt: null, ...(active === "all" ? {} : { isActive: active === "true" }) });
+
+export const deleteInventoryProduct = async (type: InventoryStockType, id: string): Promise<void> => {
+  if (!id) throw new HttpError(400, "product id zorunlu");
+  const prisma = getPrisma();
+  const args = { where: { id, deletedAt: null }, data: { deletedAt: new Date() } };
+  const result = type === "MULTIMEDIA"
+    ? await prisma.multimediaProduct.updateMany(args)
+    : type === "SCREEN"
+      ? await prisma.screenProduct.updateMany(args)
+      : await prisma.soundSystemProduct.updateMany(args);
+  if (result.count !== 1) throw new HttpError(404, "Ürün bulunamadı veya daha önce silindi");
+};
 
 export const listInventoryProducts = async (
   filter: InventoryListFilter,
@@ -272,7 +284,7 @@ const getInventoryProduct = async (
 ): Promise<InventoryProduct> => {
   const prisma = getPrisma();
   if (type === "MULTIMEDIA") {
-    const row = await prisma.multimediaProduct.findUnique({ where: { id } });
+    const row = await prisma.multimediaProduct.findUnique({ where: { id, deletedAt: null } });
     if (!row) throw new HttpError(404, "Multimedia urunu bulunamadi");
     return {
       type,
@@ -289,7 +301,7 @@ const getInventoryProduct = async (
     };
   }
   if (type === "SCREEN") {
-    const row = await prisma.screenProduct.findUnique({ where: { id } });
+    const row = await prisma.screenProduct.findUnique({ where: { id, deletedAt: null } });
     if (!row) throw new HttpError(404, "Ekran urunu bulunamadi");
     return {
       type,
@@ -306,7 +318,7 @@ const getInventoryProduct = async (
       status: inventoryStatus(row.quantity, row.criticalStockLevel),
     };
   }
-  const row = await prisma.soundSystemProduct.findUnique({ where: { id } });
+  const row = await prisma.soundSystemProduct.findUnique({ where: { id, deletedAt: null } });
   if (!row) throw new HttpError(404, "Ses sistemi urunu bulunamadi");
   return {
     type,
@@ -462,14 +474,14 @@ export const updateInventoryProduct = async (
           : {}),
       };
       if (Object.keys(data).length === 0) throw new HttpError(400, "Guncellenecek alan yok");
-      const result = await getPrisma().multimediaProduct.updateMany({ where: { id }, data });
+      const result = await getPrisma().multimediaProduct.updateMany({ where: { id, deletedAt: null }, data });
       if (result.count !== 1) throw new HttpError(404, "Multimedia urunu bulunamadi");
     } else if (type === "SCREEN") {
       const sizeInch = optionalDecimalSize(values, "sizeInch");
       const sizeLabel = optionalNullableString(values, "sizeLabel", 100);
       if (sizeInch !== undefined || sizeLabel !== undefined) {
         const current = await getPrisma().screenProduct.findUnique({
-          where: { id },
+          where: { id, deletedAt: null },
           select: { sizeInch: true, sizeLabel: true },
         });
         if (!current) throw new HttpError(404, "Ekran urunu bulunamadi");
@@ -508,7 +520,7 @@ export const updateInventoryProduct = async (
           : {}),
       };
       if (Object.keys(data).length === 0) throw new HttpError(400, "Guncellenecek alan yok");
-      const result = await getPrisma().screenProduct.updateMany({ where: { id }, data });
+      const result = await getPrisma().screenProduct.updateMany({ where: { id, deletedAt: null }, data });
       if (result.count !== 1) throw new HttpError(404, "Ekran urunu bulunamadi");
     } else {
       let purchasePriceUsd: Prisma.Decimal | null | undefined;
@@ -536,7 +548,7 @@ export const updateInventoryProduct = async (
           : {}),
       };
       if (Object.keys(data).length === 0) throw new HttpError(400, "Guncellenecek alan yok");
-      const result = await getPrisma().soundSystemProduct.updateMany({ where: { id }, data });
+      const result = await getPrisma().soundSystemProduct.updateMany({ where: { id, deletedAt: null }, data });
       if (result.count !== 1) throw new HttpError(404, "Ses sistemi urunu bulunamadi");
     }
     return getInventoryProduct(type, id);
@@ -565,21 +577,21 @@ export const adjustInventoryStock = async (
     if (type === "MULTIMEDIA") {
       count = (
         await tx.multimediaProduct.updateMany({
-          where: { id, isActive: true, ...stockCondition },
+          where: { id, deletedAt: null, isActive: true, ...stockCondition },
           data: { quantity: { increment: delta } },
         })
       ).count;
     } else if (type === "SCREEN") {
       count = (
         await tx.screenProduct.updateMany({
-          where: { id, isActive: true, ...stockCondition },
+          where: { id, deletedAt: null, isActive: true, ...stockCondition },
           data: { quantity: { increment: delta } },
         })
       ).count;
     } else {
       count = (
         await tx.soundSystemProduct.updateMany({
-          where: { id, isActive: true, ...stockCondition },
+          where: { id, deletedAt: null, isActive: true, ...stockCondition },
           data: { quantity: { increment: delta } },
         })
       ).count;
@@ -588,10 +600,10 @@ export const adjustInventoryStock = async (
     if (count !== 1) {
       const existing =
         type === "MULTIMEDIA"
-          ? await tx.multimediaProduct.findUnique({ where: { id }, select: { isActive: true } })
+          ? await tx.multimediaProduct.findUnique({ where: { id, deletedAt: null }, select: { isActive: true } })
           : type === "SCREEN"
-            ? await tx.screenProduct.findUnique({ where: { id }, select: { isActive: true } })
-            : await tx.soundSystemProduct.findUnique({ where: { id }, select: { isActive: true } });
+            ? await tx.screenProduct.findUnique({ where: { id, deletedAt: null }, select: { isActive: true } })
+            : await tx.soundSystemProduct.findUnique({ where: { id, deletedAt: null }, select: { isActive: true } });
       if (!existing) throw new HttpError(404, "Urun bulunamadi");
       if (!existing.isActive) throw new HttpError(409, "Pasif urunun stogu degistirilemez");
       throw new HttpError(409, "Stok miktari negatif olamaz");

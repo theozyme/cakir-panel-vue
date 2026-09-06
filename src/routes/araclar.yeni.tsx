@@ -53,7 +53,7 @@ function VehicleOperationForm() {
   const context = useMemo<VehicleIntakeContext | null>(() => {
     if (detailQuery.data) return { vehicle: { id: detailQuery.data.vehicleId, plate: detailQuery.data.plate, ...detailQuery.data.vehicle }, customer: detailQuery.data.customer ? { id: "", ...detailQuery.data.customer } : null };
     if (intakeQuery.data) return intakeQuery.data;
-    if (pendingQuery.data) return { vehicle: { id: "", plate: pendingQuery.data.plate, brand: null, model: null }, customer: null };
+    if (pendingQuery.data) return pendingQuery.data.intakeContext ?? { vehicle: { id: "", plate: pendingQuery.data.plate, brand: null, model: null }, customer: null };
     return null;
   }, [detailQuery.data, intakeQuery.data, pendingQuery.data]);
   const selectedOfferId = soundOfferId ?? detailQuery.data?.soundOfferId ?? undefined;

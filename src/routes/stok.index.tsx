@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  FileText,
+  Power,
   History,
   PackagePlus,
   Pencil,
@@ -18,6 +20,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { apiRequest } from "@/lib/api";
 import { inventoryStockHighlightClass } from "@/lib/inventory-style";
+import { printInventoryPdf } from "@/lib/inventory-pdf";
 import { formatMoneyString } from "@/lib/money";
 import {
   inventoryProductLabel,
@@ -82,6 +85,7 @@ function StokPage() {
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<{ mode: "create" | "edit"; product?: InventoryProduct } | null>(null);
   const [adjusting, setAdjusting] = useState<InventoryProduct | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => setPage(1), [active, criticalOnly, debouncedSearch, type]);
 
@@ -115,12 +119,30 @@ function StokPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (product: InventoryProduct) => apiRequest<void>(`/api/inventory/products/${product.type}/${product.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      invalidateStock();
+      toast.success("Ürün silindi");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const exportPdf = async () => {
+    setExporting(true);
+    try { await printInventoryPdf(queryString, productSecondary); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Stok raporu oluşturulamadı"); }
+    finally { setExporting(false); }
+  };
+
   const products = productsQuery.data?.items ?? [];
   const lastPage = Math.max(1, Math.ceil((productsQuery.data?.total ?? 0) / 50));
 
   return (
     <AppLayout title="Stok Yönetimi">
       <div className="mb-4 flex flex-wrap gap-2">
+        <button disabled={exporting || productsQuery.isFetching || Boolean(productsQuery.error) || search !== debouncedSearch} onClick={exportPdf} title="Filtrelenmiş tüm stok listesini PDF olarak kaydet / yazdır" className="inline-flex h-10 items-center gap-2 rounded-lg border border-input bg-card px-4 text-sm font-semibold hover:bg-accent disabled:opacity-50">
+          <FileText className="h-4 w-4" /> {exporting ? "Rapor hazırlanıyor..." : "Stok PDF"}
+        </button>
         <Link
           to="/stok/siparis-ver"
           search={{ tur: type }}
@@ -228,7 +250,18 @@ function StokPage() {
                           className="grid h-8 w-8 place-items-center rounded-lg border border-input text-muted-foreground hover:text-destructive disabled:opacity-40"
                           aria-label={product.isActive ? "Pasife al" : "Aktifleştir"}
                         >
-                          {product.isActive ? <Trash2 className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          {product.isActive ? <Power className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          disabled={deleteMutation.isPending || activeMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm(`${inventoryProductLabel(product)} ürünü silinsin mi?`)) deleteMutation.mutate(product);
+                          }}
+                          className="grid h-8 w-8 place-items-center rounded-lg border border-input text-destructive hover:bg-destructive/10 disabled:opacity-40"
+                          aria-label="Ürünü sil"
+                          title="Ürünü sil"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </td>

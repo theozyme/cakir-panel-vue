@@ -23,7 +23,7 @@ import { requireAppRequest, requireAuthentication } from "./modules/auth/auth.mi
 export const app = express();
 
 const allowedOrigins = new Set(
-  (process.env.APP_ORIGIN ?? "http://localhost:5173")
+  (process.env.APP_ORIGIN ?? "http://localhost:5173,http://localhost:8080")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),

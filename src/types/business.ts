@@ -5,6 +5,7 @@ export type PendingVehicle = {
   id: string;
   plate: string;
   createdAt: string;
+  intakeContext?: VehicleIntakeContext | null;
 };
 
 export type VehicleVisitDetail = {

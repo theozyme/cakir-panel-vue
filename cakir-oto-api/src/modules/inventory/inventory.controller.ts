@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from "express";
 import {
   adjustInventoryStock,
   createInventoryProduct,
+  deleteInventoryProduct,
   listInventoryProducts,
   parseInventoryListFilter,
   parseInventoryStockType,
@@ -11,6 +12,15 @@ import {
 
 const param = (value: string | string[] | undefined): string =>
   Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+
+export const deleteInventoryProductController = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await deleteInventoryProduct(parseInventoryStockType(param(req.params.type)), param(req.params.id));
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+};
 
 export const getInventoryProducts = async (
   req: Request,

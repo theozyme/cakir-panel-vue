@@ -13,7 +13,7 @@ export const listMultimediaProducts = async (
 ): Promise<MultimediaProductDto[]> =>
   getPrisma().multimediaProduct.findMany({
     where: {
-      isActive: true,
+      isActive: true, deletedAt: null,
       ...(inStockOnly ? { quantity: { gt: 0 } } : {}),
     },
     orderBy: [{ brand: "asc" }, { model: "asc" }, { code: "asc" }],
@@ -31,7 +31,7 @@ export const listMultimediaProducts = async (
 export const listScreenProducts = async (inStockOnly: boolean): Promise<ScreenProductDto[]> => {
   const rows = await getPrisma().screenProduct.findMany({
     where: {
-      isActive: true,
+      isActive: true, deletedAt: null,
       ...(inStockOnly ? { quantity: { gt: 0 } } : {}),
     },
     orderBy: [{ brand: "asc" }, { sizeInch: "asc" }],
@@ -53,7 +53,7 @@ export const listSoundSystemProducts = async (
   activeOnly: boolean,
 ): Promise<SoundSystemProductDto[]> => {
   const rows = await getPrisma().soundSystemProduct.findMany({
-    ...(activeOnly ? { where: { isActive: true } } : {}),
+    where: { deletedAt: null, ...(activeOnly ? { isActive: true } : {}) },
     orderBy: { name: "asc" },
   });
 
@@ -77,7 +77,7 @@ export const consumeMultimediaStock = async (
   const multimediaUpdate = await tx.multimediaProduct.updateMany({
     where: {
       id: multimediaProductId,
-      isActive: true,
+      isActive: true, deletedAt: null,
       quantity: { gte: 1 },
     },
     data: {
@@ -92,7 +92,7 @@ export const consumeMultimediaStock = async (
   const screenUpdate = await tx.screenProduct.updateMany({
     where: {
       id: screenProductId,
-      isActive: true,
+      isActive: true, deletedAt: null,
       quantity: { gte: 1 },
     },
     data: {
@@ -185,7 +185,7 @@ export const consumeSoundStock = async (
     const update = await tx.soundSystemProduct.updateMany({
       where: {
         id: productId,
-        isActive: true,
+        isActive: true, deletedAt: null,
         quantity: { gte: quantity },
       },
       data: {

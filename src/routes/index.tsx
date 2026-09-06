@@ -217,6 +217,12 @@ function Dashboard() {
     },
     onError: (error: Error) => toast.error(error.message),
   });
+  const cancelPendingMutation = useMutation({
+    mutationFn: (id: string) => apiRequest<void>(`/api/pending-vehicles/${id}`, { method: "DELETE" }),
+    onSuccess: () => toast.success("Bekleyen araç iptal edildi"),
+    onError: (error: Error) => toast.error(error.message),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["pending-vehicles"] }),
+  });
   const dailyData = dailyQuery.data;
   const dailyLoading = dailyQuery.isLoading;
   const dailyError = dailyQuery.error instanceof Error ? dailyQuery.error.message : null;
@@ -372,6 +378,16 @@ function Dashboard() {
                   className="inline-flex h-9 items-center rounded-lg border border-warning/40 px-3 text-xs font-semibold text-warning hover:bg-warning/10 disabled:opacity-50"
                 >
                   İşleme Al
+                </button>
+                <button
+                  type="button"
+                  disabled={cancelPendingMutation.isPending}
+                  onClick={() => {
+                    if (window.confirm(`${v.plate} plakalı bekleyen araç iptal edilsin mi?`)) cancelPendingMutation.mutate(v.id);
+                  }}
+                  className="inline-flex h-9 items-center rounded-lg border border-destructive/40 px-3 text-xs font-semibold text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                >
+                  İptal
                 </button>
               </div>
             ))}

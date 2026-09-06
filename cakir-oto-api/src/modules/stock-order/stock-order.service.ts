@@ -273,7 +273,7 @@ const buildItemData = async (
 
   if (item.stockType === "MULTIMEDIA") {
     const product = await tx.multimediaProduct.findFirst({
-      where: { id: item.productId!, isActive: true },
+      where: { id: item.productId!, isActive: true, deletedAt: null },
     });
     if (!product) throw new HttpError(400, "Multimedia urunu bulunamadi veya pasif");
     return {
@@ -291,7 +291,7 @@ const buildItemData = async (
   }
   if (item.stockType === "SCREEN") {
     const product = await tx.screenProduct.findFirst({
-      where: { id: item.productId!, isActive: true },
+      where: { id: item.productId!, isActive: true, deletedAt: null },
     });
     if (!product) throw new HttpError(400, "Ekran urunu bulunamadi veya pasif");
     return {
@@ -309,7 +309,7 @@ const buildItemData = async (
     };
   }
   const product = await tx.soundSystemProduct.findFirst({
-    where: { id: item.productId!, isActive: true },
+    where: { id: item.productId!, isActive: true, deletedAt: null },
   });
   if (!product) throw new HttpError(400, "Ses sistemi urunu bulunamadi veya pasif");
   return {
@@ -535,7 +535,7 @@ const receiveExistingProduct = async (
 ): Promise<string> => {
   if (item.stockType === "MULTIMEDIA" && item.multimediaProductId) {
     const result = await tx.multimediaProduct.updateMany({
-      where: { id: item.multimediaProductId, isActive: true },
+      where: { id: item.multimediaProductId, isActive: true, deletedAt: null },
       data: { quantity: { increment: item.quantity } },
     });
     if (result.count !== 1) throw new HttpError(409, "Multimedia urunu bulunamadi veya pasif");
@@ -543,7 +543,7 @@ const receiveExistingProduct = async (
   }
   if (item.stockType === "SCREEN" && item.screenProductId) {
     const result = await tx.screenProduct.updateMany({
-      where: { id: item.screenProductId, isActive: true },
+      where: { id: item.screenProductId, isActive: true, deletedAt: null },
       data: { quantity: { increment: item.quantity } },
     });
     if (result.count !== 1) throw new HttpError(409, "Ekran urunu bulunamadi veya pasif");
@@ -551,7 +551,7 @@ const receiveExistingProduct = async (
   }
   if (item.stockType === "SOUND_SYSTEM" && item.soundSystemProductId) {
     const result = await tx.soundSystemProduct.updateMany({
-      where: { id: item.soundSystemProductId, isActive: true },
+      where: { id: item.soundSystemProductId, isActive: true, deletedAt: null },
       data: { quantity: { increment: item.quantity } },
     });
     if (result.count !== 1) throw new HttpError(409, "Ses sistemi urunu bulunamadi veya pasif");
