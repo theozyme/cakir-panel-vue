@@ -23,6 +23,7 @@ const navItems = [
   { to: "/araclar", label: "Araç İşlemleri", icon: Car },
   { to: "/mail-order", label: "Mail Order", icon: Mail },
   { to: "/stok", label: "Stok Yönetimi", icon: Package },
+  { to: "/mal-girisi", label: "Mal Girişi", icon: Package },
   { to: "/ses-sistemi", label: "Ses Sistemi", icon: Speaker },
   { to: "/servis", label: "Servis", icon: Wrench },
   { to: "/ozel-odemeler", label: "Özel Ödemeler", icon: Wallet },

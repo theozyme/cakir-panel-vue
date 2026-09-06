@@ -18,6 +18,7 @@ import { vehicleOperationRouter } from "./modules/vehicle-operation/vehicle-oper
 import { vehicleVisitRouter } from "./modules/vehicle-visit/vehicle-visit.routes.js";
 import { vehicleRouter } from "./modules/vehicle/vehicle.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { goodsEntryRouter } from "./modules/goods-entry/goods-entry.routes.js";
 import { requireAppRequest, requireAuthentication } from "./modules/auth/auth.middleware.js";
 
 export const app = express();
@@ -51,6 +52,7 @@ app.get("/api/health", (_req: Request, res: Response) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api", requireAuthentication);
+app.use("/api/goods-entry", goodsEntryRouter);
 app.use("/api/admin/migration", migrationRouter);
 app.use("/api/pending-vehicles", pendingVehicleRouter);
 app.use("/api/vehicle-visits", vehicleVisitRouter);

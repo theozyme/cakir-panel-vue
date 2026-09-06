@@ -1,9 +1,10 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { uppercaseBusinessInput } from "@/lib/business-text";
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input"> & { businessText?: boolean }>(
+  ({ className, type, businessText = false, onChange, ...props }, ref) => {
     return (
       <input
         type={type}
@@ -13,6 +14,12 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         )}
         ref={ref}
         {...props}
+        onChange={(event) => {
+          if (businessText && (!type || type === "text") && !/email|username|password/i.test(`${props.name ?? ""} ${props.id ?? ""} ${props.autoComplete ?? ""}`) && !props.inputMode?.match(/numeric|decimal|email|url|tel/)) {
+            uppercaseBusinessInput(event);
+          }
+          onChange?.(event);
+        }}
       />
     );
   },

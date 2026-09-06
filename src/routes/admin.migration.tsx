@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { apiFetch } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { formatMoneyString } from "@/lib/money";
 
 export const Route = createFileRoute("/admin/migration")({
   head: () => ({
@@ -15,6 +17,31 @@ export const Route = createFileRoute("/admin/migration")({
   }),
   component: AdminMigrationPage,
 });
+
+type GoodsEntryRow = {
+  id: string;
+  product_name: string;
+  entry_date: string;
+  wholesaler: string;
+  purchase_price: number | string;
+  sale_price: number | string;
+  quantity: number;
+  note?: string | null;
+  created_at: string;
+};
+
+type GoodsEntryPreviewItem = {
+  legacyId: string;
+  productName: string;
+  date: string;
+  supplierName: string;
+  purchasePrice: string;
+  salePrice: string;
+  quantity: number;
+  note: string | null;
+  createdAt: string;
+  alreadyExists: boolean;
+};
 
 type ScreenStockRow = {
   kod: string;
@@ -189,6 +216,7 @@ type DryRunResponse = {
   errors: MigrationError[];
   warnings?: DryRunWarning[];
   preview: Array<
+    | GoodsEntryPreviewItem
     | ScreenStockPreviewItem
     | MultimediaStockPreviewItem
     | SoundStockPreviewItem
@@ -215,7 +243,7 @@ type SelectedFile = {
   rows:
     | SupplierMasterRows
     | Array<
-        ScreenStockRow | MultimediaStockRow | SoundStockRow | SoundOfferRow | SupplierTransactionRow
+        ScreenStockRow | MultimediaStockRow | SoundStockRow | SoundOfferRow | SupplierTransactionRow | GoodsEntryRow
       >;
 };
 
@@ -226,6 +254,13 @@ type SupplierListItem = {
 };
 
 const migrationTypes = [
+  {
+    value: "goods-entry",
+    label: "Mal Girişi",
+    fileHint: "goods_entry.json (JSON kayıt dizisi)",
+    dryRunPath: "/api/admin/migration/goods-entry/dry-run",
+    importPath: "/api/admin/migration/goods-entry/import",
+  },
   {
     value: "screen-stock",
     label: "Ekran Stokları",
@@ -324,7 +359,7 @@ const readJsonFile = async (file: File, type: MigrationType): Promise<SelectedFi
     name: file.name,
     size: file.size,
     rows: parsed as Array<
-      ScreenStockRow | MultimediaStockRow | SoundStockRow | SoundOfferRow | SupplierTransactionRow
+      ScreenStockRow | MultimediaStockRow | SoundStockRow | SoundOfferRow | SupplierTransactionRow | GoodsEntryRow
     >,
   };
 };
@@ -373,6 +408,10 @@ const postZipMigration = async <TResponse,>(path: string, file: File) => {
 const getMigrationConfig = (type: MigrationType) =>
   migrationTypes.find((migrationType) => migrationType.value === type) ?? migrationTypes[0];
 
+const isGoodsEntryPreviewItem = (
+  row: DryRunResponse["preview"][number],
+): row is GoodsEntryPreviewItem => "legacyId" in row && "productName" in row;
+
 const isMultimediaPreviewItem = (
   row: DryRunResponse["preview"][number],
 ): row is MultimediaStockPreviewItem => "code" in row;
@@ -391,7 +430,7 @@ const isSupplierPreviewItem = (
 
 const isSupplierTransactionPreviewItem = (
   row: DryRunResponse["preview"][number],
-): row is SupplierTransactionPreviewItem => "supplierName" in row;
+): row is SupplierTransactionPreviewItem => "supplierName" in row && "transactionAt" in row;
 
 const isVehicleHistoryPreviewItem = (
   row: DryRunResponse["preview"][number],
@@ -404,6 +443,7 @@ const isSpecialPaymentPreviewItem = (
 const isScreenPreviewItem = (
   row: DryRunResponse["preview"][number],
 ): row is ScreenStockPreviewItem =>
+  !isGoodsEntryPreviewItem(row) &&
   !isMultimediaPreviewItem(row) &&
   !isSoundStockPreviewItem(row) &&
   !isSoundOfferPreviewItem(row) &&
@@ -416,6 +456,7 @@ const isMigrationWarning = (warning: DryRunWarning): warning is MigrationWarning
   typeof warning !== "string";
 
 function AdminMigrationPage() {
+  const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedType, setSelectedType] = useState<MigrationType>("screen-stock");
   const [file, setFile] = useState<SelectedFile | null>(null);
@@ -583,6 +624,9 @@ function AdminMigrationPage() {
           ? await postZipMigration<ImportResponse>(selectedMigration.importPath, file.rawFile)
           : await postMigration<ImportResponse>(selectedMigration.importPath, payload);
       setImportResult(result);
+      if (selectedType === "goods-entry") {
+        await queryClient.invalidateQueries({ queryKey: ["goods-entry"] });
+      }
       toast.success("Import tamamlandı.");
     } catch (error) {
       setImportResult(null);
@@ -608,6 +652,14 @@ function AdminMigrationPage() {
               </option>
             ))}
           </select>
+
+          {selectedType === "goods-entry" && (
+            <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+              <p>Kayıtları <code>[&#123;...&#125;, &#123;...&#125;]</code> biçiminde bir JSON dosyasına koyun. Önce Dry Run ile kontrol edin, ardından Import Et seçeneğini kullanın.</p>
+              <p>Alanlar: id, product_name, entry_date, wholesaler, purchase_price, sale_price, quantity, note, created_at. Uzun id değerlerini tırnak içinde metin olarak tutun.</p>
+              <p>Aynı ürünün girişleri geçmiş olarak birleştirilir. Aktarılmış id değerleri atlanır. Stok ve finans kayıtlarına yansımaz.</p>
+            </div>
+          )}
 
           {requiresSupplier && (
             <div className="mt-4">
@@ -1138,6 +1190,33 @@ function AdminMigrationPage() {
                           );
                         })}
                       </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {previewRows.length > 0 && selectedType === "goods-entry" && (
+                <div className="card-elevated p-5">
+                  <h2 className="mb-4 text-base font-bold">Mal Girişi Önizleme</h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                        <tr>{["Eski ID", "Ürün", "Giriş Tarihi", "Toptancı", "Alış", "Satış", "Adet", "Not", "Oluşturulma", "Durum"].map(label => <th key={label} className="whitespace-nowrap px-4 py-3 text-left font-semibold">{label}</th>)}</tr>
+                      </thead>
+                      <tbody>{previewRows.filter(isGoodsEntryPreviewItem).map(row => (
+                        <tr key={row.legacyId} className="border-t border-border/60 hover:bg-muted/30">
+                          <td className="px-4 py-3 text-muted-foreground">{row.legacyId}</td>
+                          <td className="px-4 py-3 font-semibold">{row.productName}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{row.date.split("-").reverse().join(".")}</td>
+                          <td className="px-4 py-3">{row.supplierName}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{formatMoneyString(row.purchasePrice, "TRY")}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{formatMoneyString(row.salePrice, "TRY")}</td>
+                          <td className="px-4 py-3">{row.quantity}</td>
+                          <td className="min-w-40 whitespace-pre-wrap px-4 py-3">{row.note ?? "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-3">{new Date(row.createdAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</td>
+                          <td className="px-4 py-3"><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${row.alreadyExists ? "bg-warning/15 text-warning" : "bg-success/15 text-success"}`}>{row.alreadyExists ? "Zaten Mevcut" : "Yeni"}</span></td>
+                        </tr>
+                      ))}</tbody>
                     </table>
                   </div>
                 </div>

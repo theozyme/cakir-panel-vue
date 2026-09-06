@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AraclarRouteImport } from './routes/araclar'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MailOrderRouteImport } from './routes/mail-order'
+import { Route as MalGirisiRouteImport } from './routes/mal-girisi'
 import { Route as OzelOdemelerRouteImport } from './routes/ozel-odemeler'
 import { Route as RaporlarRouteImport } from './routes/raporlar'
 import { Route as ServisRouteImport } from './routes/servis'
@@ -47,6 +48,11 @@ const LoginRoute = LoginRouteImport.update({
 const MailOrderRoute = MailOrderRouteImport.update({
   id: '/mail-order',
   path: '/mail-order',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MalGirisiRoute = MalGirisiRouteImport.update({
+  id: '/mal-girisi',
+  path: '/mal-girisi',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OzelOdemelerRoute = OzelOdemelerRouteImport.update({
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/araclar': typeof AraclarRouteWithChildren
   '/login': typeof LoginRoute
   '/mail-order': typeof MailOrderRoute
+  '/mal-girisi': typeof MalGirisiRoute
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/mail-order': typeof MailOrderRoute
+  '/mal-girisi': typeof MalGirisiRoute
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/araclar': typeof AraclarRouteWithChildren
   '/login': typeof LoginRoute
   '/mail-order': typeof MailOrderRoute
+  '/mal-girisi': typeof MalGirisiRoute
   '/ozel-odemeler': typeof OzelOdemelerRoute
   '/raporlar': typeof RaporlarRoute
   '/servis': typeof ServisRoute
@@ -193,6 +202,7 @@ export interface FileRouteTypes {
     | '/araclar'
     | '/login'
     | '/mail-order'
+    | '/mal-girisi'
     | '/ozel-odemeler'
     | '/raporlar'
     | '/servis'
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/mail-order'
+    | '/mal-girisi'
     | '/ozel-odemeler'
     | '/raporlar'
     | '/servis'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/araclar'
     | '/login'
     | '/mail-order'
+    | '/mal-girisi'
     | '/ozel-odemeler'
     | '/raporlar'
     | '/servis'
@@ -254,6 +266,7 @@ export interface RootRouteChildren {
   AraclarRoute: typeof AraclarRouteWithChildren
   LoginRoute: typeof LoginRoute
   MailOrderRoute: typeof MailOrderRoute
+  MalGirisiRoute: typeof MalGirisiRoute
   OzelOdemelerRoute: typeof OzelOdemelerRoute
   RaporlarRoute: typeof RaporlarRoute
   ServisRoute: typeof ServisRoute
@@ -290,6 +303,13 @@ declare module '@tanstack/react-router' {
       path: '/mail-order'
       fullPath: '/mail-order'
       preLoaderRoute: typeof MailOrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mal-girisi': {
+      id: '/mal-girisi'
+      path: '/mal-girisi'
+      fullPath: '/mal-girisi'
+      preLoaderRoute: typeof MalGirisiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/ozel-odemeler': {
@@ -450,6 +470,7 @@ const rootRouteChildren: RootRouteChildren = {
   AraclarRoute: AraclarRouteWithChildren,
   LoginRoute: LoginRoute,
   MailOrderRoute: MailOrderRoute,
+  MalGirisiRoute: MalGirisiRoute,
   OzelOdemelerRoute: OzelOdemelerRoute,
   RaporlarRoute: RaporlarRoute,
   ServisRoute: ServisRoute,

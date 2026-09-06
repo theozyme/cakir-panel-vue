@@ -1,6 +1,8 @@
 import { Router, raw } from "express";
 
 import {
+  dryRunGoodsEntryMigration,
+  importGoodsEntryMigration,
   dryRunMultimediaStockMigration,
   dryRunScreenStockMigration,
   dryRunSpecialPaymentsMigration,
@@ -28,6 +30,8 @@ const zipUpload = raw({
 });
 
 migrationRouter.get("/status", getMigrationStatus);
+migrationRouter.post("/goods-entry/dry-run", dryRunGoodsEntryMigration);
+migrationRouter.post("/goods-entry/import", importGoodsEntryMigration);
 migrationRouter.get("/suppliers", getSuppliers);
 migrationRouter.post("/screen-stock/dry-run", dryRunScreenStockMigration);
 migrationRouter.post("/screen-stock/import", importScreenStockMigration);

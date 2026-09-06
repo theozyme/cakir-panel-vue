@@ -1,9 +1,10 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { uppercaseBusinessInput } from "@/lib/business-text";
 
-const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"textarea">>(
-  ({ className, ...props }, ref) => {
+const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"textarea"> & { businessText?: boolean }>(
+  ({ className, businessText = false, onChange, ...props }, ref) => {
     return (
       <textarea
         className={cn(
@@ -12,6 +13,10 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"tex
         )}
         ref={ref}
         {...props}
+        onChange={(event) => {
+          if (businessText) uppercaseBusinessInput(event);
+          onChange?.(event);
+        }}
       />
     );
   },

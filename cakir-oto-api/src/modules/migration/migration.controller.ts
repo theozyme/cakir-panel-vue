@@ -1,4 +1,13 @@
 import type { NextFunction, Request, Response } from "express";
+import { importGoodsEntries, runGoodsEntryDryRun } from "./goods-entry-migration.service.js";
+
+export const dryRunGoodsEntryMigration = async (req: Request, res: Response, next: NextFunction) => {
+  try { res.json(await runGoodsEntryDryRun(req.body)); } catch (error) { next(error); }
+};
+
+export const importGoodsEntryMigration = async (req: Request, res: Response, next: NextFunction) => {
+  try { res.json(await importGoodsEntries(req.body)); } catch (error) { next(error); }
+};
 
 import {
   getMigrationModuleStatus,
