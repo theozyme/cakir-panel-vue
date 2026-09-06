@@ -7,6 +7,9 @@ export async function getProducts(req: Request, res: Response, next: NextFunctio
 export async function postEntry(req: Request, res: Response, next: NextFunction) {
   try { res.status(201).json(await service.createEntry(req.body)); } catch (error) { next(error); }
 }
+export async function postRevision(req: Request, res: Response, next: NextFunction) {
+  try { res.status(201).json(await service.reviseEntry(String(req.params.id), req.body)); } catch (error) { next(error); }
+}
 export async function getHistory(req: Request, res: Response, next: NextFunction) {
   try { res.json(await service.history(String(req.params.id), req.query)); } catch (error) { next(error); }
 }

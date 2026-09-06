@@ -76,7 +76,7 @@ const activeWhere = (active: InventoryActiveFilter) =>
 export const deleteInventoryProduct = async (type: InventoryStockType, id: string): Promise<void> => {
   if (!id) throw new HttpError(400, "product id zorunlu");
   const prisma = getPrisma();
-  const args = { where: { id, deletedAt: null }, data: { deletedAt: new Date() } };
+  const args = { where: { id, deletedAt: null }, data: { isActive: false } };
   const result = type === "MULTIMEDIA"
     ? await prisma.multimediaProduct.updateMany(args)
     : type === "SCREEN"

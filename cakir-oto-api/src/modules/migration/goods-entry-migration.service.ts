@@ -113,7 +113,7 @@ export async function importGoodsEntries(body: unknown) {
         productId = product.id;
         productIds.set(row.normalizedName, productId);
       }
-      entries.push({ ...row.data, id: row.id, productId, createdAt: row.createdAt, updatedAt: row.createdAt });
+      entries.push({ ...row.data, id: row.id, productId, productName: row.name, createdAt: row.createdAt, updatedAt: row.createdAt });
     }
     let success = 0;
     for (let offset = 0; offset < entries.length; offset += 500) {

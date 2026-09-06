@@ -1,6 +1,9 @@
 export interface GoodsEntry {
   id: string;
   productId: string;
+  productName: string | null;
+  supersedesId: string | null;
+  createdAt: string;
   date: string;
   supplierName: string;
   purchasePrice: string;

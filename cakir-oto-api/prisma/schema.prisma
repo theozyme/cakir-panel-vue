@@ -17,6 +17,10 @@ model GoodsProduct {
 model GoodsEntry {
   id            String       @id @default(uuid())
   productId     String       @map("product_id")
+  productName   String?      @map("product_name") @db.VarChar(200)
+  supersedesId  String?      @unique @map("supersedes_id")
+  supersedes    GoodsEntry?  @relation("GoodsEntryRevisions", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy  GoodsEntry?  @relation("GoodsEntryRevisions")
   date          DateTime     @db.Date
   supplierName  String       @map("supplier_name") @db.VarChar(200)
   purchasePrice Decimal      @map("purchase_price") @db.Decimal(14, 2)

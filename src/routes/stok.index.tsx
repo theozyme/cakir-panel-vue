@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   FileText,
-  Power,
   History,
   PackagePlus,
   Pencil,
@@ -110,11 +109,11 @@ function StokPage() {
     mutationFn: (product: InventoryProduct) =>
       apiRequest<InventoryProduct>(`/api/inventory/products/${product.type}/${product.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ isActive: !product.isActive }),
+        body: JSON.stringify({ isActive: true }),
       }),
-    onSuccess: (product) => {
+    onSuccess: () => {
       invalidateStock();
-      toast.success(product.isActive ? "Ürün yeniden aktifleştirildi" : "Ürün pasife alındı");
+      toast.success("Ürün yeniden aktifleştirildi");
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -241,18 +240,18 @@ function StokPage() {
                         <button disabled={!product.isActive} onClick={() => setAdjusting(product)} className="grid h-8 w-8 place-items-center rounded-lg border border-input text-muted-foreground hover:text-primary disabled:opacity-40" aria-label="Stok düzelt">
                           <PackagePlus className="h-3.5 w-3.5" />
                         </button>
-                        <button
-                          disabled={activeMutation.isPending}
+                        {!product.isActive && <button
+                          disabled={activeMutation.isPending || deleteMutation.isPending}
                           onClick={() => {
-                            const action = product.isActive ? "pasife almak" : "aktifleştirmek";
-                            if (window.confirm(`${inventoryProductLabel(product)} ürününü ${action} istiyor musunuz?`)) activeMutation.mutate(product);
+                            if (window.confirm(`${inventoryProductLabel(product)} ürününü aktifleştirmek istiyor musunuz?`)) activeMutation.mutate(product);
                           }}
                           className="grid h-8 w-8 place-items-center rounded-lg border border-input text-muted-foreground hover:text-destructive disabled:opacity-40"
-                          aria-label={product.isActive ? "Pasife al" : "Aktifleştir"}
+                          aria-label="Aktifleştir"
+                          title="Aktifleştir"
                         >
-                          {product.isActive ? <Power className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                        </button>
-                        <button
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </button>}
+                        {product.isActive && <button
                           disabled={deleteMutation.isPending || activeMutation.isPending}
                           onClick={() => {
                             if (window.confirm(`${inventoryProductLabel(product)} ürünü silinsin mi?`)) deleteMutation.mutate(product);
@@ -262,7 +261,7 @@ function StokPage() {
                           title="Ürünü sil"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        </button>}
                       </div>
                     </td>
                   </tr>

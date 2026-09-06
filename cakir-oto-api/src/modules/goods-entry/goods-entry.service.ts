@@ -70,11 +70,32 @@ export async function createEntry(body: unknown) {
       : await tx.goodsProduct.upsert({ where: { normalizedName }, create: { name, normalizedName }, update: {} });
     if (!product) throw new HttpError(404, "Ürün bulunamadı");
     if (product.normalizedName !== normalizedName) throw new HttpError(400, "Ürün adı seçilen ürünle eşleşmiyor");
-    return dto(await tx.goodsEntry.create({ data: { ...data, productId: product.id } }));
+    return dto(await tx.goodsEntry.create({ data: { ...data, productId: product.id, productName: product.name } }));
   });
   try { return await save(); } catch (error) {
     // Concurrent first entries must share the unique master, without losing either entry.
     if (!productId && isPrismaErrorCode(error, "P2002")) return save();
+    throw error;
+  }
+}
+
+export async function reviseEntry(id: string, body: unknown) {
+  const { name, normalizedName, productId, data } = parseGoodsEntry(body);
+  try {
+    return await getPrisma().$transaction(async (tx) => {
+      const previous = await tx.goodsEntry.findUnique({ where: { id }, include: { product: true, supersededBy: { select: { id: true } } } });
+      if (!previous) throw new HttpError(404, "Mal girişi bulunamadı");
+      if (previous.supersededBy) throw new HttpError(409, "Bu kayıt zaten düzenlenmiş. Listeyi yenileyip tekrar deneyin.");
+      if (productId !== previous.productId) throw new HttpError(400, "Ürün eşleşmesi geçersiz");
+      const collision = await tx.goodsProduct.findUnique({ where: { normalizedName } });
+      if (collision && collision.id !== previous.productId) throw new HttpError(409, "Bu adla başka bir ürün mevcut");
+      // Preserve names on legacy entries before changing the master name.
+      await tx.goodsEntry.updateMany({ where: { productId: previous.productId, productName: null }, data: { productName: previous.product.name } });
+      await tx.goodsProduct.update({ where: { id: previous.productId }, data: { name, normalizedName } });
+      return dto(await tx.goodsEntry.create({ data: { ...data, productId: previous.productId, productName: name, supersedesId: id } }));
+    });
+  } catch (error) {
+    if (isPrismaErrorCode(error, "P2002")) throw new HttpError(409, "Kayıt başka bir işlemle değişti veya ürün adı kullanımda. Listeyi yenileyin.");
     throw error;
   }
 }
@@ -86,6 +107,7 @@ export async function listProducts(query: Record<string, unknown>) {
   if (search) {
     const text = uppercase(search);
     const entryOr: Prisma.GoodsEntryWhereInput[] = [
+      { productName: { contains: text, mode: "insensitive" } },
       { supplierName: { contains: text, mode: "insensitive" } },
       { note: { contains: text, mode: "insensitive" } },
     ];
@@ -100,7 +122,7 @@ export async function listProducts(query: Record<string, unknown>) {
     const products = await tx.goodsProduct.findMany({
       where, skip: (page - 1) * pageSize, take: pageSize,
       orderBy: [{ name: "asc" }, { id: "asc" }],
-      include: { entries: { orderBy, take: 1 }, _count: { select: { entries: true } } },
+      include: { entries: { where: { supersededBy: null }, orderBy, take: 1 }, _count: { select: { entries: true } } },
     });
     return { items: products.map(({ entries, _count, ...product }) => ({ ...product, latestEntry: entries[0] ? dto(entries[0]) : null, entryCount: _count.entries })), total, page, pageSize };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
@@ -111,8 +133,8 @@ export async function history(id: string, query: Record<string, unknown>) {
   return getPrisma().$transaction(async (tx) => {
     if (!await tx.goodsProduct.findUnique({ where: { id } })) throw new HttpError(404, "Ürün bulunamadı");
     const total = await tx.goodsEntry.count({ where: { productId: id } });
-    // The current entry is already visible in the parent row.
-    const rows = await tx.goodsEntry.findMany({ where: { productId: id }, orderBy, skip: 1 + (page - 1) * pageSize, take: pageSize });
+    const latest = await tx.goodsEntry.findFirst({ where: { productId: id, supersededBy: null }, orderBy, select: { id: true } });
+    const rows = await tx.goodsEntry.findMany({ where: { productId: id, ...(latest ? { id: { not: latest.id } } : {}) }, orderBy, skip: (page - 1) * pageSize, take: pageSize });
     return { items: rows.map(dto), total: Math.max(0, total - 1), page, pageSize };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 }
@@ -125,11 +147,12 @@ export async function statistics(query: Record<string, unknown>) {
   if (group !== "products" && group !== "suppliers") throw new HttpError(400, "İstatistik grubu geçersiz");
   return getPrisma().$transaction(async (tx) => {
     if (group === "suppliers") {
-      const counts = await tx.$queryRaw<{ total: bigint }[]>`SELECT COUNT(DISTINCT supplier_name) AS total FROM goods_entries`;
+      const counts = await tx.$queryRaw<{ total: bigint }[]>`SELECT COUNT(DISTINCT supplier_name) AS total FROM goods_entries e WHERE NOT EXISTS (SELECT 1 FROM goods_entries r WHERE r.supersedes_id = e.id)`;
       const rows = await tx.$queryRaw<SupplierTotal[]>`
         SELECT supplier_name AS "supplierName", SUM(quantity) AS "totalQuantity",
           SUM(purchase_price * quantity) AS "totalPurchase", COUNT(*) AS "entryCount"
-        FROM goods_entries GROUP BY supplier_name ORDER BY supplier_name
+        FROM goods_entries e WHERE NOT EXISTS (SELECT 1 FROM goods_entries r WHERE r.supersedes_id = e.id)
+        GROUP BY supplier_name ORDER BY supplier_name
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
       return { items: rows.map(row => ({ ...row, totalQuantity: row.totalQuantity.toString(), totalPurchase: row.totalPurchase.toFixed(2), entryCount: row.entryCount.toString() })), total: Number(counts[0]?.total ?? 0), page, pageSize };
     }
@@ -140,6 +163,7 @@ export async function statistics(query: Record<string, unknown>) {
         SUM(e.sale_price * e.quantity) AS "totalPotentialSale",
         SUM((e.sale_price - e.purchase_price) * e.quantity) AS "estimatedProfit"
       FROM goods_products p JOIN goods_entries e ON e.product_id = p.id
+      WHERE NOT EXISTS (SELECT 1 FROM goods_entries r WHERE r.supersedes_id = e.id)
       GROUP BY p.id, p.name ORDER BY p.name, p.id
       LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`;
     return { items: rows.map(row => ({ ...row, totalQuantity: row.totalQuantity.toString(), totalPurchase: row.totalPurchase.toFixed(2), totalPotentialSale: row.totalPotentialSale.toFixed(2), estimatedProfit: row.estimatedProfit.toFixed(2) })), total, page, pageSize };
