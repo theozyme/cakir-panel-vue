@@ -21,8 +21,18 @@ export const listVehicles = async (
   limitQuery: unknown,
 ): Promise<VehicleLookupResponse> => {
   const search = typeof searchQuery === "string" ? searchQuery.trim() : "";
+  const normalizedSearch = search.toUpperCase().replace(/\s+/g, "");
   const rows = await getPrisma().vehicle.findMany({
-    ...(search ? { where: { plate: { contains: search, mode: "insensitive" as const } } } : {}),
+    ...(search
+      ? {
+          where: {
+            OR: [
+              { plate: { contains: search, mode: "insensitive" as const } },
+              { normalizedPlate: { contains: normalizedSearch, mode: "insensitive" as const } },
+            ],
+          },
+        }
+      : {}),
     take: parseLimit(limitQuery),
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     select: {

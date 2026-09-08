@@ -1,13 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, Fragment, type ReactNode } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Clock,
   Car,
   ListChecks,
   TrendingUp,
-  PackageX,
+  CalendarRange,
   Plus,
   ArrowRight,
   ChevronDown,
@@ -34,8 +34,8 @@ import type {
   DailyVehicleOperationResponse,
   DailyVehicleVisit,
   PendingVehicle,
+  VehicleLookupResponse,
 } from "@/types/business";
-import type { InventoryListResponse, InventoryStockType } from "@/types/inventory";
 import type { DashboardFinance, DashboardPaymentPeriod } from "@/types/reports";
 
 interface DashboardMetricProps {
@@ -174,6 +174,8 @@ function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [plaka, setPlaka] = useState("");
+  const [plateLookup, setPlateLookup] = useState("");
+  const [plateSuggestionsOpen, setPlateSuggestionsOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getTodayDateKey);
   const [financeCurrency, setFinanceCurrency] = useState<Currency>("TRY");
   const [paymentPeriod, setPaymentPeriod] = useState<DashboardPaymentPeriod>("month");
@@ -195,14 +197,20 @@ function Dashboard() {
       ),
     placeholderData: (previousData) => previousData,
   });
-  const criticalStockQueries = useQueries({
-    queries: (["MULTIMEDIA", "SCREEN", "SOUND_SYSTEM"] as InventoryStockType[]).map((type) => ({
-      queryKey: ["inventory", "dashboard-critical", type],
-      queryFn: () =>
-        apiRequest<InventoryListResponse>(
-          `/api/inventory/products?type=${type}&active=true&criticalOnly=true&page=1&pageSize=1`,
-        ),
-    })),
+  const annualFinanceQuery = useQuery({
+    queryKey: ["reports", "dashboard", "monthly-average", selectedDate],
+    queryFn: () =>
+      apiRequest<DashboardFinance>(
+        `/api/reports/dashboard?date=${selectedDate}&paymentPeriod=1y`,
+      ),
+  });
+  const plateLookupQuery = useQuery({
+    queryKey: ["vehicles", "dashboard-plate-lookup", plateLookup],
+    queryFn: () =>
+      apiRequest<VehicleLookupResponse>(
+        `/api/vehicles?search=${encodeURIComponent(plateLookup)}&limit=10`,
+      ),
+    enabled: plateLookup.length >= 3,
   });
   const createPendingMutation = useMutation({
     mutationFn: (plate: string) =>
@@ -251,13 +259,30 @@ function Dashboard() {
       color: paymentMethodColors[item.key] ?? "var(--color-muted-foreground)",
     }))
     .filter((item) => item.value !== 0);
-  const kritikStok = criticalStockQueries.some((query) => query.isLoading)
+  const monthlyAverageValue = annualFinanceQuery.isLoading || annualFinanceQuery.isError
     ? "-"
-    : criticalStockQueries.reduce((total, query) => total + (query.data?.total ?? 0), 0);
+    : formatTotals(
+        (annualFinanceQuery.data?.paymentMethods ?? []).reduce(
+          (totals, item) => ({
+            TRY: (Number(totals.TRY) + Number(item.amounts.TRY) / 12).toFixed(2),
+            USD: (Number(totals.USD) + Number(item.amounts.USD) / 12).toFixed(2),
+          }),
+          { TRY: "0.00", USD: "0.00" },
+        ),
+      );
 
   useEffect(() => {
     if (!financeHasUsd) setFinanceCurrency("TRY");
   }, [financeHasUsd]);
+
+  useEffect(() => {
+    const normalized = plaka.trim().toUpperCase().replace(/\s+/g, "");
+    const timer = window.setTimeout(
+      () => setPlateLookup(normalized.length >= 3 ? normalized : ""),
+      250,
+    );
+    return () => window.clearTimeout(timer);
+  }, [plaka]);
 
   return (
     <AppLayout title="Ana Sayfa">
@@ -286,11 +311,11 @@ function Dashboard() {
           tone="success"
         />
         <DashboardMetric
-          label="Kritik Stok"
-          value={kritikStok}
-          icon={<PackageX className="h-5 w-5" />}
-          tone="destructive"
-          hint="Stoğu eşik altında"
+          label="Aylık Ortalama Kazanç"
+          value={monthlyAverageValue}
+          icon={<CalendarRange className="h-5 w-5" />}
+          tone="success"
+          hint="Son 12 ay ortalaması"
         />
       </section>
 
@@ -311,15 +336,51 @@ function Dashboard() {
                 toast.error("Plaka girin");
                 return;
               }
+              setPlateSuggestionsOpen(false);
               createPendingMutation.mutate(normalized);
             }}
           >
-            <input
-              value={plaka}
-              onChange={(e) => setPlaka(e.target.value.toUpperCase())}
-              placeholder="34 ABC 123"
-              className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
-            />
+            <div className="relative min-w-0 flex-1">
+              <input
+                value={plaka}
+                onFocus={() => setPlateSuggestionsOpen(true)}
+                onChange={(event) => {
+                  setPlaka(event.target.value.toUpperCase());
+                  setPlateSuggestionsOpen(true);
+                }}
+                placeholder="34 ABC 123"
+                autoComplete="off"
+                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+              {plateSuggestionsOpen && plateLookup.length >= 3 && (
+                <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg">
+                  {plateLookupQuery.isLoading && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">Plakalar aranıyor...</div>
+                  )}
+                  {!plateLookupQuery.isLoading && plateLookupQuery.data?.items.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">Kayıtlı plaka bulunamadı.</div>
+                  )}
+                  {plateLookupQuery.data?.items.map((vehicle) => (
+                    <button
+                      key={vehicle.vehicleId}
+                      type="button"
+                      onClick={() => {
+                        setPlaka(vehicle.plate);
+                        setPlateSuggestionsOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
+                    >
+                      <span className="font-semibold">{vehicle.plate}</span>
+                      {(vehicle.brand || vehicle.model) && (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {[vehicle.brand, vehicle.model].filter(Boolean).join(" ")}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               type="submit"
               disabled={createPendingMutation.isPending}

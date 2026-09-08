@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { apiRequest } from "@/lib/api";
+import { toBusinessUppercase, uppercaseBusinessInput } from "@/lib/business-text";
 import { inventoryStockHighlightClass } from "@/lib/inventory-style";
 import { printInventoryPdf } from "@/lib/inventory-pdf";
 import { formatMoneyString } from "@/lib/money";
@@ -34,13 +35,13 @@ export const Route = createFileRoute("/stok/")({
   head: () => ({
     meta: [
       { title: "Stok Yönetimi · Çakır Oto" },
-      { name: "description", content: "Multimedya, ekran ve ses sistemi stok takibi." },
+      { name: "description", content: "Multimedya ve ekran stok takibi." },
     ],
   }),
   component: StokPage,
 });
 
-const tabs: InventoryStockType[] = ["MULTIMEDIA", "SCREEN", "SOUND_SYSTEM"];
+const tabs: InventoryStockType[] = ["MULTIMEDIA", "SCREEN"];
 const inputClass =
   "h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary";
 
@@ -74,6 +75,23 @@ const productSecondary = (product: InventoryProduct): string => {
     : "Alış USD tanımlı değil";
 };
 
+const fetchAllProducts = async (queryString: string): Promise<InventoryListResponse> => {
+  const params = new URLSearchParams(queryString);
+  params.set("page", "1");
+  params.set("pageSize", "100");
+  const firstPage = await apiRequest<InventoryListResponse>(`/api/inventory/products?${params}`);
+  const pageCount = Math.ceil(firstPage.total / firstPage.pageSize);
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) => {
+      const pageParams = new URLSearchParams(params);
+      pageParams.set("page", String(index + 2));
+      return apiRequest<InventoryListResponse>(`/api/inventory/products?${pageParams}`);
+    }),
+  );
+  const items = [firstPage, ...remainingPages].flatMap((result) => result.items);
+  return { ...firstPage, items, page: 1, pageSize: items.length };
+};
+
 function StokPage() {
   const queryClient = useQueryClient();
   const [type, setType] = useState<InventoryStockType>("MULTIMEDIA");
@@ -81,23 +99,20 @@ function StokPage() {
   const debouncedSearch = useDebouncedValue(search, 300);
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [active, setActive] = useState<"true" | "false" | "all">("true");
-  const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<{ mode: "create" | "edit"; product?: InventoryProduct } | null>(null);
   const [adjusting, setAdjusting] = useState<InventoryProduct | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => setPage(1), [active, criticalOnly, debouncedSearch, type]);
-
   const queryString = useMemo(() => {
-    const params = new URLSearchParams({ type, active, page: String(page), pageSize: "50" });
+    const params = new URLSearchParams({ type, active, page: "1", pageSize: "100" });
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (criticalOnly) params.set("criticalOnly", "true");
     return params.toString();
-  }, [active, criticalOnly, debouncedSearch, page, type]);
+  }, [active, criticalOnly, debouncedSearch, type]);
 
   const productsQuery = useQuery({
     queryKey: ["inventory", type, queryString],
-    queryFn: () => apiRequest<InventoryListResponse>(`/api/inventory/products?${queryString}`),
+    queryFn: () => fetchAllProducts(queryString),
   });
 
   const invalidateStock = () => {
@@ -134,7 +149,6 @@ function StokPage() {
   };
 
   const products = productsQuery.data?.items ?? [];
-  const lastPage = Math.max(1, Math.ceil((productsQuery.data?.total ?? 0) / 50));
 
   return (
     <AppLayout title="Stok Yönetimi">
@@ -179,7 +193,7 @@ function StokPage() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => setSearch(toBusinessUppercase(event.target.value))}
               placeholder="Ürün, marka veya kod ara..."
               className={`${inputClass} pl-9`}
             />
@@ -274,13 +288,8 @@ function StokPage() {
           </div>
         )}
 
-        <div className="mt-4 flex items-center justify-between text-sm">
+        <div className="mt-4 text-sm">
           <span className="text-muted-foreground">Toplam {productsQuery.data?.total ?? 0} kayıt</span>
-          <div className="flex items-center gap-2">
-            <button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="h-9 rounded-lg border border-input px-3 disabled:opacity-40">Önceki</button>
-            <span>{page} / {lastPage}</span>
-            <button disabled={page >= lastPage} onClick={() => setPage((value) => Math.min(lastPage, value + 1))} className="h-9 rounded-lg border border-input px-3 disabled:opacity-40">Sonraki</button>
-          </div>
         </div>
       </div>
 
@@ -396,7 +405,7 @@ function Field({ name, label, defaultValue, type = "text", step, required }: { n
   return (
     <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
       {label}
-      <input name={name} type={type} min={type === "number" ? "0" : undefined} step={step} defaultValue={defaultValue} required={required} className={inputClass} />
+      <input name={name} type={type} min={type === "number" ? "0" : undefined} step={step} defaultValue={defaultValue} required={required} onChange={type === "text" ? uppercaseBusinessInput : undefined} className={inputClass} />
     </label>
   );
 }
@@ -418,7 +427,7 @@ function StockAdjustment({ product, onClose, onSaved }: { product: InventoryProd
       <div className="mb-4 rounded-lg bg-muted/60 p-3 text-sm">{inventoryProductLabel(product)} · Mevcut stok: <b>{product.quantity}</b></div>
       <div className="grid gap-3">
         <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Signed miktar (+5 / -2)<input type="number" value={quantityDelta} onChange={(event) => setQuantityDelta(event.target.value)} className={inputClass} /></label>
-        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Açıklama<textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} className="min-h-24 rounded-lg border border-input bg-background p-3 text-sm" /></label>
+        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">Açıklama<textarea value={note} onChange={(event) => setNote(toBusinessUppercase(event.target.value))} maxLength={1000} className="min-h-24 rounded-lg border border-input bg-background p-3 text-sm" /></label>
       </div>
       <div className="mt-5 flex justify-end gap-2">
         <button onClick={onClose} className="h-10 rounded-lg border border-input px-4 text-sm font-semibold">Vazgeç</button>
