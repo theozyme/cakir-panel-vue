@@ -25,7 +25,7 @@ import type {
 
 const timeZone = "Europe/Istanbul" as const;
 const periods = ["day", "month", "year"] as const;
-const dashboardPaymentPeriods = ["today", "month", "30d", "90d", "1y"] as const;
+const dashboardPaymentPeriods = ["today", "month", "mtd", "30d", "90d", "1y"] as const;
 const currencies = ["TRY", "USD"] as const;
 
 type DateParts = {
@@ -227,7 +227,7 @@ export const parseDashboardFinanceFilter = (query: unknown): DashboardFinanceFil
     "1y": -364,
   };
   const paymentStart =
-    paymentPeriod === "month"
+    paymentPeriod === "month" || paymentPeriod === "mtd"
       ? monthFilter.start
       : parseReportPeriodFilter({
           period: "day",

@@ -1,6 +1,6 @@
 export type ReportPeriod = "day" | "month" | "year";
 export type ReportCurrency = "TRY" | "USD";
-export type DashboardPaymentPeriod = "today" | "month" | "30d" | "90d" | "1y";
+export type DashboardPaymentPeriod = "today" | "month" | "mtd" | "30d" | "90d" | "1y";
 
 export type CurrencyTotals = Record<ReportCurrency, string>;
 

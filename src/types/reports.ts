@@ -1,7 +1,7 @@
 import type { Currency } from "./business";
 
 export type ReportPeriod = "day" | "month" | "year";
-export type DashboardPaymentPeriod = "today" | "month" | "30d" | "90d" | "1y";
+export type DashboardPaymentPeriod = "today" | "month" | "mtd" | "30d" | "90d" | "1y";
 export type ReportCurrencyTotals = Record<Currency, string>;
 
 export type ReportDistributionItem = {

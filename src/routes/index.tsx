@@ -65,7 +65,7 @@ function DashboardMetric({ label, value, icon, tone = "default", hint }: Dashboa
         <div className="mt-0.5 truncate text-xl font-bold tracking-tight text-foreground">
           {value}
         </div>
-        {hint && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{hint}</div>}
+        {hint && <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{hint}</div>}
       </div>
     </div>
   );
@@ -204,6 +204,13 @@ function Dashboard() {
         `/api/reports/dashboard?date=${selectedDate}&paymentPeriod=1y`,
       ),
   });
+  const monthToDateFinanceQuery = useQuery({
+    queryKey: ["reports", "dashboard", "month-to-date-average", selectedDate],
+    queryFn: () =>
+      apiRequest<DashboardFinance>(
+        `/api/reports/dashboard?date=${selectedDate}&paymentPeriod=mtd`,
+      ),
+  });
   const plateLookupQuery = useQuery({
     queryKey: ["vehicles", "dashboard-plate-lookup", plateLookup],
     queryFn: () =>
@@ -270,6 +277,25 @@ function Dashboard() {
           { TRY: "0.00", USD: "0.00" },
         ),
       );
+  const selectedDayOfMonth = Number(selectedDate.slice(8, 10));
+  const monthlyDailyAverageValue =
+    monthToDateFinanceQuery.isLoading || monthToDateFinanceQuery.isError
+      ? "-"
+      : formatTotals(
+          (monthToDateFinanceQuery.data?.paymentMethods ?? []).reduce(
+            (totals, item) => ({
+              TRY: (
+                Number(totals.TRY) +
+                Number(item.amounts.TRY) / selectedDayOfMonth
+              ).toFixed(2),
+              USD: (
+                Number(totals.USD) +
+                Number(item.amounts.USD) / selectedDayOfMonth
+              ).toFixed(2),
+            }),
+            { TRY: "0.00", USD: "0.00" },
+          ),
+        );
 
   useEffect(() => {
     if (!financeHasUsd) setFinanceCurrency("TRY");
@@ -315,7 +341,7 @@ function Dashboard() {
           value={monthlyAverageValue}
           icon={<CalendarRange className="h-5 w-5" />}
           tone="success"
-          hint="Son 12 ay ortalaması"
+          hint={`İlgili ay günlük ort.: ${monthlyDailyAverageValue}`}
         />
       </section>
 
