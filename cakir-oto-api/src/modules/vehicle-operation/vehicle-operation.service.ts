@@ -56,7 +56,7 @@ const parseOperationInput = (value: unknown): OperationInput => {
   if (type !== "SOUND_SYSTEM" && soundOfferId) throw new HttpError(400, "soundOfferId sadece SOUND_SYSTEM operation icin gonderilebilir");
   if (paymentMethod === "MAIL_ORDER" && !mailOrderSupplierId) throw new HttpError(400, "MAIL_ORDER odeme icin supplier zorunlu");
   if (paymentMethod !== "MAIL_ORDER" && mailOrderSupplierId) throw new HttpError(400, "Supplier sadece MAIL_ORDER odeme icin gonderilebilir");
-  return { type, description: requiredString(operation.description, "operation.description", 150), priceInput: operation.price, currency, note: optionalString(operation.note, "operation.note"), paymentMethod, multimediaProductId, screenProductId, soundOfferId, mailOrderSupplierId };
+  return { type, description: optionalString(operation.description, "operation.description", 150) ?? "", priceInput: operation.price, currency, note: optionalString(operation.note, "operation.note"), paymentMethod, multimediaProductId, screenProductId, soundOfferId, mailOrderSupplierId };
 };
 
 const parsePartyInput = (root: Record<string, unknown>): PartyInput => {
