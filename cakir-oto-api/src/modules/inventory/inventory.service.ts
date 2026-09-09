@@ -430,6 +430,35 @@ export const createInventoryProduct = async (body: unknown): Promise<InventoryPr
   }
 };
 
+// A quantity entered in the editor is an absolute manual correction. Record its
+// delta in the same transaction as the master fields so history stays intact.
+const recordEditorStockCorrection = async (
+  tx: Prisma.TransactionClient,
+  type: "SCREEN" | "MULTIMEDIA",
+  id: string,
+  quantity: number | undefined,
+) => {
+  if (quantity === undefined) return;
+  const current = type === "SCREEN"
+    ? await tx.screenProduct.findUnique({ where: { id, deletedAt: null } })
+    : await tx.multimediaProduct.findUnique({ where: { id, deletedAt: null } });
+  if (!current) throw new HttpError(404, "Urun bulunamadi");
+  const delta = quantity - current.quantity;
+  if (delta === 0) return;
+  if (!current.isActive) throw new HttpError(409, "Pasif urunun stogu degistirilemez");
+  await tx.stockMovement.create({
+    data: {
+      stockType: type,
+      productId: id,
+      movementType: "MANUAL_CORRECTION",
+      quantity: delta,
+      referenceType: "MANUAL_CORRECTION",
+      referenceId: null,
+      note: "Ürün düzenleme üzerinden stok düzeltmesi",
+    },
+  });
+};
+
 export const updateInventoryProduct = async (
   type: InventoryStockType,
   id: string,
@@ -437,20 +466,23 @@ export const updateInventoryProduct = async (
 ): Promise<InventoryProduct> => {
   const values = asRecord(body);
   if (
-    Object.prototype.hasOwnProperty.call(values, "quantity") ||
+    (type === "SOUND_SYSTEM" && Object.prototype.hasOwnProperty.call(values, "quantity")) ||
     Object.prototype.hasOwnProperty.call(values, "initialQuantity")
   ) {
     throw new HttpError(400, "quantity yalniz stock movement ile degistirilebilir");
   }
+  const quantity = Object.prototype.hasOwnProperty.call(values, "quantity")
+    ? nonNegativeInteger(values.quantity, "quantity") : undefined;
 
   try {
     if (type === "MULTIMEDIA") {
       const data = {
+        ...(quantity !== undefined ? { quantity } : {}),
         ...(Object.prototype.hasOwnProperty.call(values, "code")
           ? { code: requiredString(values.code, "code", 100) }
           : {}),
-        ...(Object.prototype.hasOwnProperty.call(values, "brand")
-          ? { brand: requiredString(values.brand, "brand", 100) }
+        ...(optionalNullableString(values, "brand", 100) !== undefined
+          ? { brand: optionalNullableString(values, "brand", 100) }
           : {}),
         ...(optionalNullableString(values, "model", 150) !== undefined
           ? { model: optionalNullableString(values, "model", 150) }
@@ -474,7 +506,10 @@ export const updateInventoryProduct = async (
           : {}),
       };
       if (Object.keys(data).length === 0) throw new HttpError(400, "Guncellenecek alan yok");
-      const result = await getPrisma().multimediaProduct.updateMany({ where: { id, deletedAt: null }, data });
+      const result = await withSerializableTransaction(async (tx) => {
+        await recordEditorStockCorrection(tx, "MULTIMEDIA", id, quantity);
+        return tx.multimediaProduct.updateMany({ where: { id, deletedAt: null }, data });
+      });
       if (result.count !== 1) throw new HttpError(404, "Multimedia urunu bulunamadi");
     } else if (type === "SCREEN") {
       const sizeInch = optionalDecimalSize(values, "sizeInch");
@@ -493,6 +528,7 @@ export const updateInventoryProduct = async (
         }
       }
       const data = {
+        ...(quantity !== undefined ? { quantity } : {}),
         ...(Object.prototype.hasOwnProperty.call(values, "brand")
           ? { brand: requiredString(values.brand, "brand", 150) }
           : {}),
@@ -520,7 +556,10 @@ export const updateInventoryProduct = async (
           : {}),
       };
       if (Object.keys(data).length === 0) throw new HttpError(400, "Guncellenecek alan yok");
-      const result = await getPrisma().screenProduct.updateMany({ where: { id, deletedAt: null }, data });
+      const result = await withSerializableTransaction(async (tx) => {
+        await recordEditorStockCorrection(tx, "SCREEN", id, quantity);
+        return tx.screenProduct.updateMany({ where: { id, deletedAt: null }, data });
+      });
       if (result.count !== 1) throw new HttpError(404, "Ekran urunu bulunamadi");
     } else {
       let purchasePriceUsd: Prisma.Decimal | null | undefined;

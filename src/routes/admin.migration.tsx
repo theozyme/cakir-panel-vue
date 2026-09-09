@@ -119,8 +119,11 @@ type ScreenStockPreviewItem = {
   ramGb: number;
   cores: number;
   sizeInch: string | null;
+  sizeLabel: string | null;
   quantity: number;
   alreadyExists: boolean;
+  action: "NEW" | "UPDATE" | "SKIP";
+  changes: Array<{ field: string; current: string | null; legacy: string | null }>;
 };
 
 type MultimediaStockPreviewItem = {
@@ -132,6 +135,8 @@ type MultimediaStockPreviewItem = {
   shelf: string | null;
   quantity: number;
   alreadyExists: boolean;
+  action: "NEW" | "UPDATE" | "SKIP";
+  changes: Array<{ field: string; current: string | null; legacy: string | null }>;
 };
 
 type SoundStockPreviewItem = {
@@ -193,6 +198,9 @@ type SpecialPaymentPreviewItem = {
 };
 
 type DryRunResponse = {
+  newCount?: number;
+  updateCount?: number;
+  skipped?: number;
   total?: number;
   valid?: number;
   invalid?: number;
@@ -624,6 +632,10 @@ function AdminMigrationPage() {
           ? await postZipMigration<ImportResponse>(selectedMigration.importPath, file.rawFile)
           : await postMigration<ImportResponse>(selectedMigration.importPath, payload);
       setImportResult(result);
+      if (selectedType === "screen-stock" || selectedType === "multimedia-stock") {
+        await queryClient.invalidateQueries({ queryKey: ["inventory"] });
+        await queryClient.invalidateQueries({ queryKey: ["stock"] });
+      }
       if (selectedType === "goods-entry") {
         await queryClient.invalidateQueries({ queryKey: ["goods-entry"] });
       }
@@ -817,6 +829,14 @@ function AdminMigrationPage() {
                   <ResultCard label="Ziyaret" value={dryRunResult.totalVisits ?? 0} />
                   <ResultCard label="İşlem" value={dryRunResult.totalOperations ?? 0} />
                 </div>
+              ) : selectedType === "screen-stock" || selectedType === "multimedia-stock" ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  <ResultCard label="Toplam kaynak kayıt" value={dryRunResult.total ?? 0} />
+                  <ResultCard label="Yeni kayıt" value={dryRunResult.newCount ?? 0} tone="success" />
+                  <ResultCard label="Güncellenecek kayıt" value={dryRunResult.updateCount ?? 0} tone="warning" />
+                  <ResultCard label="Atlanacak kayıt" value={dryRunResult.skipped ?? 0} />
+                  <ResultCard label="Hatalı kayıt" value={dryRunResult.invalid ?? 0} tone="destructive" />
+                </div>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <ResultCard label="Toplam" value={dryRunResult.total ?? 0} />
@@ -991,8 +1011,9 @@ function AdminMigrationPage() {
                           <th className="px-4 py-3 text-right font-semibold">RAM</th>
                           <th className="px-4 py-3 text-right font-semibold">Çekirdek</th>
                           <th className="px-4 py-3 text-right font-semibold">Boyut</th>
-                          <th className="px-4 py-3 text-right font-semibold">Adet</th>
+                          <th className="px-4 py-3 text-right font-semibold">Stok</th>
                           <th className="px-4 py-3 text-left font-semibold">Durum</th>
+                          <th className="px-4 py-3 text-left font-semibold">Alan farkları</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1009,7 +1030,7 @@ function AdminMigrationPage() {
                               <td className="px-4 py-3 text-right">{row.storageGb}</td>
                               <td className="px-4 py-3 text-right">{row.ramGb}</td>
                               <td className="px-4 py-3 text-right">{row.cores}</td>
-                              <td className="px-4 py-3 text-right">{row.sizeInch}</td>
+                              <td className="px-4 py-3 text-right">{row.sizeLabel ?? row.sizeInch ?? "-"}</td>
                               <td className="px-4 py-3 text-right font-bold">{row.quantity}</td>
                               <td className="px-4 py-3">
                                 <span
@@ -1019,8 +1040,11 @@ function AdminMigrationPage() {
                                       : "bg-success/15 text-success"
                                   }`}
                                 >
-                                  {row.alreadyExists ? "Zaten Mevcut" : "Yeni"}
+                                  {row.action === "UPDATE" ? "Güncellenecek" : row.action === "SKIP" ? "Atlanacak (aynı)" : "Yeni"}
                                 </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {row.action === "UPDATE" && <StockMigrationDifferences changes={row.changes} />}
                               </td>
                             </tr>
                           );
@@ -1047,8 +1071,9 @@ function AdminMigrationPage() {
                           <th className="px-4 py-3 text-left font-semibold">Marka</th>
                           <th className="px-4 py-3 text-left font-semibold">Model</th>
                           <th className="px-4 py-3 text-left font-semibold">Raf</th>
-                          <th className="px-4 py-3 text-right font-semibold">Adet</th>
+                          <th className="px-4 py-3 text-right font-semibold">Stok</th>
                           <th className="px-4 py-3 text-left font-semibold">Durum</th>
+                          <th className="px-4 py-3 text-left font-semibold">Alan farkları</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1075,8 +1100,11 @@ function AdminMigrationPage() {
                                       : "bg-success/15 text-success"
                                   }`}
                                 >
-                                  {row.alreadyExists ? "Zaten Mevcut" : "Yeni"}
+                                  {row.action === "UPDATE" ? "Güncellenecek" : row.action === "SKIP" ? "Atlanacak (aynı)" : "Yeni"}
                                 </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {row.action === "UPDATE" && <StockMigrationDifferences changes={row.changes} />}
                               </td>
                             </tr>
                           );
@@ -1430,4 +1458,20 @@ function ResultCard({
       <div className={`mt-2 break-all text-2xl font-black ${toneClass}`}>{value}</div>
     </div>
   );
+}
+
+const stockMigrationFieldLabels: Record<string, string> = {
+  brand: "Marka", storageGb: "Hafıza (GB)", ramGb: "RAM (GB)", cores: "Çekirdek",
+  sizeInch: "Boyut (inç)", sizeLabel: "Boyut etiketi", quantity: "Stok",
+  code: "Kod", forx: "Forx", model: "Model", shelf: "Raf",
+};
+
+function StockMigrationDifferences({ changes }: { changes: ScreenStockPreviewItem["changes"] }) {
+  return <table className="text-xs">
+    <thead><tr><th className="pr-3 text-left">Alan</th><th className="pr-3 text-left">Mevcut değer</th><th className="text-left">Legacy değeri</th></tr></thead>
+    <tbody>{changes.map((change) => <tr key={change.field}>
+      <td className="pr-3">{stockMigrationFieldLabels[change.field] ?? change.field}</td>
+      <td className="pr-3">{change.current ?? "—"}</td><td>{change.legacy ?? "—"}</td>
+    </tr>)}</tbody>
+  </table>;
 }

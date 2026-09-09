@@ -171,11 +171,22 @@ export type SoundOfferWarning = {
   message: string;
 };
 
-export type ScreenStockPreviewItem = ScreenStockParsedRow & {
+export type StockMigrationChange = {
+  field: string;
+  current: string | null;
+  legacy: string | null;
+};
+
+export type StockMigrationPlan = {
+  action: "NEW" | "UPDATE" | "SKIP";
+  changes: StockMigrationChange[];
+};
+
+export type ScreenStockPreviewItem = ScreenStockParsedRow & StockMigrationPlan & {
   alreadyExists: boolean;
 };
 
-export type MultimediaStockPreviewItem = MultimediaStockParsedRow & {
+export type MultimediaStockPreviewItem = MultimediaStockParsedRow & StockMigrationPlan & {
   alreadyExists: boolean;
 };
 
@@ -225,6 +236,9 @@ export type VehicleHistoryPreviewItem = {
 };
 
 export type ScreenStockDryRunResponse = {
+  newCount: number;
+  updateCount: number;
+  skipped: number;
   total: number;
   valid: number;
   invalid: number;
@@ -234,6 +248,9 @@ export type ScreenStockDryRunResponse = {
 };
 
 export type MultimediaStockDryRunResponse = {
+  newCount: number;
+  updateCount: number;
+  skipped: number;
   total: number;
   valid: number;
   invalid: number;

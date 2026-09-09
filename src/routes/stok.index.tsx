@@ -219,10 +219,12 @@ function StokPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Ürün</th>
-                  <th className="px-4 py-3 text-left font-semibold">Gerçek DB bilgileri</th>
-                  <th className="px-4 py-3 text-center font-semibold">Adet</th>
-                  <th className="px-4 py-3 text-center font-semibold">Kritik</th>
+                  {(type === "SCREEN"
+                    ? ["Marka / Model", "Hafıza (GB)", "RAM (GB)", "Çekirdek", "Boyut (inç)", "Boyut etiketi"]
+                    : ["Kod", "Marka", "Model", "Forx", "Raf"]
+                  ).map((label) => <th key={label} className="px-4 py-3 text-left font-semibold">{label}</th>)}
+                  <th className="px-4 py-3 text-center font-semibold">Stok</th>
+                  <th className="px-4 py-3 text-center font-semibold">Kritik Stok</th>
                   <th className="px-4 py-3 text-left font-semibold">Stok durumu</th>
                   <th className="px-4 py-3 text-left font-semibold">Kayıt</th>
                   <th className="px-4 py-3 text-right font-semibold">İşlem</th>
@@ -234,8 +236,12 @@ function StokPage() {
                     key={product.id}
                     className={`border-t border-border/60 transition-colors ${inventoryStockHighlightClass(product.status)}`}
                   >
-                    <td className="px-4 py-3 font-semibold">{inventoryProductLabel(product)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{productSecondary(product) || "—"}</td>
+                    {product.type === "SCREEN" && [product.brand, product.storageGb, product.ramGb, product.cores, product.sizeInch, product.sizeLabel].map((value, index) => (
+                      <td key={index} className="px-4 py-3">{value ?? "—"}</td>
+                    ))}
+                    {product.type === "MULTIMEDIA" && [product.code, product.brand, product.model, product.forx, product.shelf].map((value, index) => (
+                      <td key={index} className="px-4 py-3">{value ?? "—"}</td>
+                    ))}
                     <td className="px-4 py-3 text-center text-base font-bold">{product.quantity}</td>
                     <td className="px-4 py-3 text-center">{product.criticalStockLevel}</td>
                     <td className="px-4 py-3">
@@ -281,7 +287,7 @@ function StokPage() {
                   </tr>
                 ))}
                 {products.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">Kayıt bulunamadı</td></tr>
+                  <tr><td colSpan={type === "SCREEN" ? 11 : 10} className="px-4 py-10 text-center text-sm text-muted-foreground">Kayıt bulunamadı</td></tr>
                 )}
               </tbody>
             </table>
@@ -338,7 +344,7 @@ function ProductEditor({ type, product, onClose, onSaved }: { type: InventorySto
     const integer = (key: string) => Number(text(key) || 0);
     let payload: Record<string, unknown>;
     if (type === "MULTIMEDIA") {
-      payload = { code: text("code"), brand: text("brand"), model: nullable("model"), forx: nullable("forx"), shelf: nullable("shelf"), criticalStockLevel: integer("criticalStockLevel") };
+      payload = { code: text("code"), brand: product ? nullable("brand") : text("brand"), model: nullable("model"), forx: nullable("forx"), shelf: nullable("shelf"), criticalStockLevel: integer("criticalStockLevel") };
     } else if (type === "SCREEN") {
       payload = {
         brand: text("brand"),
@@ -352,7 +358,16 @@ function ProductEditor({ type, product, onClose, onSaved }: { type: InventorySto
     } else {
       payload = { name: text("name"), purchasePriceUsd: text("purchasePriceUsd"), criticalStockLevel: integer("criticalStockLevel") };
     }
+    if (product?.type === "SCREEN") {
+      // Legacy products may have neither size field; an unrelated edit should
+      // preserve those values without requiring a new size.
+      if (nullable("sizeInch") === product.sizeInch) delete payload.sizeInch;
+      if (nullable("sizeLabel") === product.sizeLabel) delete payload.sizeLabel;
+    }
     if (!product) payload.initialQuantity = integer("initialQuantity");
+    else if ((type === "SCREEN" || type === "MULTIMEDIA") && integer("quantity") !== product.quantity) {
+      payload.quantity = integer("quantity");
+    }
     mutation.mutate(payload);
   };
 
@@ -362,7 +377,7 @@ function ProductEditor({ type, product, onClose, onSaved }: { type: InventorySto
         {type === "MULTIMEDIA" && (
           <>
             <Field name="code" label="Ürün kodu *" defaultValue={formValue(product, "code")} required />
-            <Field name="brand" label="Marka *" defaultValue={formValue(product, "brand")} required />
+            <Field name="brand" label={product ? "Marka" : "Marka *"} defaultValue={formValue(product, "brand")} required={!product} />
             <Field name="model" label="Model" defaultValue={formValue(product, "model")} />
             <Field name="forx" label="FORX" defaultValue={formValue(product, "forx")} />
             <Field name="shelf" label="Raf" defaultValue={formValue(product, "shelf")} />
@@ -388,8 +403,9 @@ function ProductEditor({ type, product, onClose, onSaved }: { type: InventorySto
             <Field name="purchasePriceUsd" label="Alış USD *" type="number" step="0.01" defaultValue={formValue(product, "purchasePriceUsd")} required />
           </>
         )}
-        <div className={`grid gap-3 ${product ? "grid-cols-1" : "grid-cols-2"}`}>
+        <div className="grid grid-cols-2 gap-3">
           <Field name="criticalStockLevel" label="Kritik stok" type="number" defaultValue={formValue(product, "criticalStockLevel") || "0"} required />
+          {product && (type === "SCREEN" || type === "MULTIMEDIA") && <Field name="quantity" label="Stok" type="number" defaultValue={formValue(product, "quantity")} required />}
           {!product && <Field name="initialQuantity" label="İlk adet" type="number" defaultValue="0" required />}
         </div>
         <div className="mt-3 flex justify-end gap-2">

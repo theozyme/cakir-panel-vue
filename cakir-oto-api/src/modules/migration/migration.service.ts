@@ -986,7 +986,11 @@ const parseScreenStockRow = (
   index: number,
   seenIds: Set<string>,
 ): { data?: ScreenStockParsedRow; error?: MigrationRowError } => {
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    return { error: { row: index, messages: ["Kaynak kayıt JSON nesnesi olmalı"] } };
+  }
   const errors: string[] = [];
+  // The original import used kod as the product ID; keep that identity on re-import.
   const id = valueAsString(row.kod);
   const brand = valueAsString(row.marka);
   const storageGb = parseInteger(row.hafiza, "hafiza", errors);
@@ -994,6 +998,20 @@ const parseScreenStockRow = (
   const cores = parseInteger(row.cekirdek, "cekirdek", errors);
   const { sizeInch, sizeLabel } = parseScreenSize(row.boyut);
   const quantity = parseInteger(row.adet, "adet", errors);
+
+  for (const [field, value] of Object.entries({ hafiza: storageGb, ram: ramGb, cekirdek: cores, adet: quantity })) {
+    if (value !== undefined && (value < -2147483648 || value > 2147483647)) {
+      errors.push(`${field} DB integer aralığında olmalı`);
+    }
+  }
+  if (brand && brand.length > 150) errors.push("marka en fazla 150 karakter olmalı");
+  if (sizeLabel && sizeLabel.length > 100) errors.push("boyut etiketi en fazla 100 karakter olmalı");
+  if (sizeInch !== null) {
+    const size = new Prisma.Decimal(sizeInch);
+    if (size.abs().greaterThan("999.99") || size.decimalPlaces() > 2) {
+      errors.push("boyut Decimal(5, 2) alanına uygun olmalı");
+    }
+  }
 
   if (!id || !uuidRegex.test(id)) {
     errors.push("kod eksik veya bozuk UUID");
@@ -1036,10 +1054,21 @@ const parseMultimediaStockRow = (
   index: number,
   seenIds: Set<string>,
 ): { data?: MultimediaStockParsedRow; error?: MigrationRowError } => {
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    return { error: { row: index, messages: ["Kaynak kayıt JSON nesnesi olmalı"] } };
+  }
   const errors: string[] = [];
+  // Match the legacy id, never the mutable product code or display name.
   const id = valueAsString(row.id);
   const code = valueAsString(row.kod);
   const quantity = parseInteger(row.adet, "adet", errors);
+  if (quantity !== undefined && (quantity < -2147483648 || quantity > 2147483647)) {
+    errors.push("adet DB integer aralığında olmalı");
+  }
+  for (const [field, limit] of Object.entries({ kod: 100, forx: 100, model: 150, raf: 30, marka: 100 })) {
+    const value = valueAsString(row[field as keyof MultimediaStockMigrationInput]);
+    if (value && value.length > limit) errors.push(`${field} en fazla ${limit} karakter olmalı`);
+  }
 
   if (!id || !uuidRegex.test(id)) {
     errors.push("id eksik veya bozuk UUID");
@@ -1425,46 +1454,6 @@ const parseSupplierTransactionPayload = async (body: unknown) => {
   };
 };
 
-const findExistingScreenProductIds = async (ids: string[]): Promise<Set<string>> => {
-  if (ids.length === 0) {
-    return new Set();
-  }
-
-  const prisma = getPrisma();
-  const rows = await prisma.screenProduct.findMany({
-    where: {
-      id: {
-        in: ids,
-      },
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  return new Set(rows.map((row) => row.id));
-};
-
-const findExistingMultimediaProductIds = async (ids: string[]): Promise<Set<string>> => {
-  if (ids.length === 0) {
-    return new Set();
-  }
-
-  const prisma = getPrisma();
-  const rows = await prisma.multimediaProduct.findMany({
-    where: {
-      id: {
-        in: ids,
-      },
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  return new Set(rows.map((row) => row.id));
-};
-
 const getSoundProductNameMap = async (): Promise<Map<string, string>> => {
   const prisma = getPrisma();
   const rows = await prisma.soundSystemProduct.findMany({
@@ -1623,23 +1612,26 @@ const findExistingSupplierTransactionSignatures = async (
   );
 };
 
-const buildPreview = (
-  validRows: ScreenStockParsedRow[],
-  existingIds: Set<string>,
-): ScreenStockPreviewItem[] =>
-  validRows.map((row) => ({
-    ...row,
-    alreadyExists: existingIds.has(row.id),
-  }));
-
-const buildMultimediaPreview = (
-  validRows: MultimediaStockParsedRow[],
-  existingIds: Set<string>,
-): MultimediaStockPreviewItem[] =>
-  validRows.map((row) => ({
-    ...row,
-    alreadyExists: existingIds.has(row.id),
-  }));
+// Compare only explicitly mapped legacy fields, preserving IDs, lifecycle fields and relations.
+const stockMigrationPlan = (
+  row: ScreenStockParsedRow | MultimediaStockParsedRow,
+  current: Record<string, unknown> | undefined,
+) => {
+  const changes = Object.entries(row).flatMap(([field, value]) => {
+    if (field === "id") return [];
+    const normalize = (value: unknown): string | null =>
+      value === null || value === undefined ? null
+        : field === "sizeInch" ? new Prisma.Decimal(String(value)).toString() : String(value);
+    const legacy = normalize(value);
+    const previous = normalize(current?.[field]);
+    return previous === legacy ? [] : [{ field, current: previous, legacy }];
+  });
+  return {
+    alreadyExists: Boolean(current),
+    action: !current ? "NEW" as const : changes.length ? "UPDATE" as const : "SKIP" as const,
+    changes,
+  };
+};
 
 const buildSoundStockPreview = (
   validRows: SoundStockParsedRow[],
@@ -1742,31 +1734,47 @@ const buildVehicleHistoryPreview = (
 
 export const runScreenStockDryRun = async (body: unknown): Promise<ScreenStockDryRunResponse> => {
   const { total, validRows, errors } = parseScreenStockPayload(body);
-  const existingIds = await findExistingScreenProductIds(validRows.map((row) => row.id));
-
+  const existing = await getPrisma().screenProduct.findMany({
+    where: { id: { in: validRows.map((row) => row.id) } },
+  });
+  const byId = new Map(existing.map((row) => [row.id, row]));
+  const preview: ScreenStockPreviewItem[] = validRows.map((row) => ({
+    ...row,
+    ...stockMigrationPlan(row, byId.get(row.id)),
+  }));
   return {
     total,
     valid: validRows.length,
     invalid: errors.length,
-    alreadyExists: existingIds.size,
+    alreadyExists: existing.length,
+    newCount: preview.filter((row) => row.action === "NEW").length,
+    updateCount: preview.filter((row) => row.action === "UPDATE").length,
+    skipped: preview.filter((row) => row.action === "SKIP").length,
     errors,
-    preview: buildPreview(validRows, existingIds),
+    preview,
   };
 };
 
-export const runMultimediaStockDryRun = async (
-  body: unknown,
-): Promise<MultimediaStockDryRunResponse> => {
+export const runMultimediaStockDryRun = async (body: unknown): Promise<MultimediaStockDryRunResponse> => {
   const { total, validRows, errors } = parseMultimediaStockPayload(body);
-  const existingIds = await findExistingMultimediaProductIds(validRows.map((row) => row.id));
-
+  const existing = await getPrisma().multimediaProduct.findMany({
+    where: { id: { in: validRows.map((row) => row.id) } },
+  });
+  const byId = new Map(existing.map((row) => [row.id, row]));
+  const preview: MultimediaStockPreviewItem[] = validRows.map((row) => ({
+    ...row,
+    ...stockMigrationPlan(row, byId.get(row.id)),
+  }));
   return {
     total,
     valid: validRows.length,
     invalid: errors.length,
-    alreadyExists: existingIds.size,
+    alreadyExists: existing.length,
+    newCount: preview.filter((row) => row.action === "NEW").length,
+    updateCount: preview.filter((row) => row.action === "UPDATE").length,
+    skipped: preview.filter((row) => row.action === "SKIP").length,
     errors,
-    preview: buildMultimediaPreview(validRows, existingIds),
+    preview,
   };
 };
 
@@ -1891,26 +1899,9 @@ export const runVehicleHistoryDryRun = async (
 
 export const importScreenStock = async (body: unknown): Promise<ScreenStockImportResponse> => {
   const { payload, total, validRows, errors } = parseScreenStockPayload(body);
-  const fileHash = createFileHash(payload);
+  // Keep a separate audit batch per re-import; product writes remain idempotent.
+  const fileHash = createFileHash({ dataType: screenStockDataType, payload, attempt: randomUUID() });
   const prisma = getPrisma();
-
-  const previousBatch = await prisma.migrationBatch.findUnique({
-    where: {
-      fileHash,
-    },
-    select: {
-      id: true,
-      status: true,
-    },
-  });
-
-  if (previousBatch?.status === "SUCCESS") {
-    throw new HttpError(409, "Bu payload daha once basariyla import edilmis");
-  }
-
-  if (previousBatch) {
-    throw new HttpError(409, "Bu payload icin migration batch zaten mevcut");
-  }
 
   return prisma.$transaction(async (tx) => {
     const existingRows =
@@ -1921,13 +1912,10 @@ export const importScreenStock = async (body: unknown): Promise<ScreenStockImpor
                 in: validRows.map((row) => row.id),
               },
             },
-            select: {
-              id: true,
-            },
           })
         : [];
-    const existingIds = new Set(existingRows.map((row) => row.id));
-    const rowsToCreate = validRows.filter((row) => !existingIds.has(row.id));
+    const byId = new Map(existingRows.map((row) => [row.id, row]));
+    const rowsToWrite = validRows.filter((row) => stockMigrationPlan(row, byId.get(row.id)).action !== "SKIP");
     const batch = await tx.migrationBatch.create({
       data: {
         dataType: screenStockDataType,
@@ -1959,24 +1947,17 @@ export const importScreenStock = async (body: unknown): Promise<ScreenStockImpor
       });
     }
 
-    const createResult =
-      rowsToCreate.length > 0
-        ? await tx.screenProduct.createMany({
-            data: rowsToCreate.map((row) => ({
-              id: row.id,
-              brand: row.brand,
-              storageGb: row.storageGb,
-              ramGb: row.ramGb,
-              cores: row.cores,
-              sizeInch: row.sizeInch ? new Prisma.Decimal(row.sizeInch) : null,
-              sizeLabel: row.sizeLabel,
-              quantity: row.quantity,
-            })),
-            skipDuplicates: true,
-          })
-        : { count: 0 };
+    for (const row of rowsToWrite) {
+      const { id, ...fields } = row;
+      const data = { ...fields, sizeInch: row.sizeInch === null ? null : new Prisma.Decimal(row.sizeInch) };
+      await tx.screenProduct.upsert({
+        where: { id },
+        create: { id, ...data },
+        update: data,
+      });
+    }
 
-    const skipped = validRows.length - createResult.count;
+    const skipped = validRows.length - rowsToWrite.length;
     const status = errors.length > 0 ? "COMPLETED_WITH_ERRORS" : "SUCCESS";
 
     await tx.migrationBatch.update({
@@ -1985,7 +1966,7 @@ export const importScreenStock = async (body: unknown): Promise<ScreenStockImpor
       },
       data: {
         status,
-        successCount: createResult.count,
+        successCount: rowsToWrite.length,
         skippedCount: skipped,
         errorCount: errors.length,
         finishedAt: new Date(),
@@ -1995,37 +1976,20 @@ export const importScreenStock = async (body: unknown): Promise<ScreenStockImpor
     return {
       batchId: batch.id,
       total,
-      success: createResult.count,
+      success: rowsToWrite.length,
       skipped,
       error: errors.length,
     };
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 60000 });
 };
 
 export const importMultimediaStock = async (
   body: unknown,
 ): Promise<MultimediaStockImportResponse> => {
   const { payload, total, validRows, errors } = parseMultimediaStockPayload(body);
-  const fileHash = createFileHash(payload);
+  // Keep a separate audit batch per re-import; product writes remain idempotent.
+  const fileHash = createFileHash({ dataType: multimediaStockDataType, payload, attempt: randomUUID() });
   const prisma = getPrisma();
-
-  const previousBatch = await prisma.migrationBatch.findUnique({
-    where: {
-      fileHash,
-    },
-    select: {
-      id: true,
-      status: true,
-    },
-  });
-
-  if (previousBatch?.status === "SUCCESS") {
-    throw new HttpError(409, "Bu payload daha once basariyla import edilmis");
-  }
-
-  if (previousBatch) {
-    throw new HttpError(409, "Bu payload icin migration batch zaten mevcut");
-  }
 
   return prisma.$transaction(async (tx) => {
     const existingRows =
@@ -2036,13 +2000,10 @@ export const importMultimediaStock = async (
                 in: validRows.map((row) => row.id),
               },
             },
-            select: {
-              id: true,
-            },
           })
         : [];
-    const existingIds = new Set(existingRows.map((row) => row.id));
-    const rowsToCreate = validRows.filter((row) => !existingIds.has(row.id));
+    const byId = new Map(existingRows.map((row) => [row.id, row]));
+    const rowsToWrite = validRows.filter((row) => stockMigrationPlan(row, byId.get(row.id)).action !== "SKIP");
     const batch = await tx.migrationBatch.create({
       data: {
         dataType: multimediaStockDataType,
@@ -2074,23 +2035,17 @@ export const importMultimediaStock = async (
       });
     }
 
-    const createResult =
-      rowsToCreate.length > 0
-        ? await tx.multimediaProduct.createMany({
-            data: rowsToCreate.map((row) => ({
-              id: row.id,
-              code: row.code,
-              forx: row.forx,
-              model: row.model,
-              quantity: row.quantity,
-              shelf: row.shelf,
-              brand: row.brand,
-            })),
-            skipDuplicates: true,
-          })
-        : { count: 0 };
+    for (const row of rowsToWrite) {
+      const { id, ...fields } = row;
+      const data = fields;
+      await tx.multimediaProduct.upsert({
+        where: { id },
+        create: { id, ...data },
+        update: data,
+      });
+    }
 
-    const skipped = validRows.length - createResult.count;
+    const skipped = validRows.length - rowsToWrite.length;
     const status = errors.length > 0 ? "COMPLETED_WITH_ERRORS" : "SUCCESS";
 
     await tx.migrationBatch.update({
@@ -2099,7 +2054,7 @@ export const importMultimediaStock = async (
       },
       data: {
         status,
-        successCount: createResult.count,
+        successCount: rowsToWrite.length,
         skippedCount: skipped,
         errorCount: errors.length,
         finishedAt: new Date(),
@@ -2109,11 +2064,11 @@ export const importMultimediaStock = async (
     return {
       batchId: batch.id,
       total,
-      success: createResult.count,
+      success: rowsToWrite.length,
       skipped,
       error: errors.length,
     };
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 60000 });
 };
 
 export const importSoundStock = async (body: unknown): Promise<SoundStockImportResponse> => {
