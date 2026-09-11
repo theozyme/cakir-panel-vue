@@ -118,7 +118,17 @@ export type MailOrderCurrencySummary = {
 
 export type MailOrderSummary = Record<Currency, MailOrderCurrencySummary>;
 
-export type SupplierTransaction = {
+export type PaymentConversion = {
+  sourceAmount: string | null;
+  sourceCurrency: string | null;
+  exchangeRate: string | null;
+  exchangeRateType: string | null;
+  exchangeRateDate: string | null;
+  exchangeRateFetchedAt: string | null;
+  exchangeRateIsStale: boolean | null;
+};
+
+export type SupplierTransaction = PaymentConversion & {
   id: string;
   transactionAt: string;
   type: "DEBT_INCREASE" | "PAYMENT" | "ADJUSTMENT" | "CANCEL";
@@ -247,6 +257,14 @@ export type VehicleIntakeContext = {
 };
 
 export type VehicleOperationDetail = {
+  supplierPayment:
+    | (PaymentConversion & {
+        supplierId: string;
+        amount: string;
+        currency: string;
+        transactionAt: string;
+      })
+    | null;
   id: string;
   visitId: string;
   vehicleId: string;
@@ -262,7 +280,12 @@ export type VehicleOperationDetail = {
   multimediaProductId: string | null;
   screenProductId: string | null;
   mailOrderSupplierId: string | null;
-  multimediaProduct: { id: string; code: string; brand: string | null; model: string | null } | null;
+  multimediaProduct: {
+    id: string;
+    code: string;
+    brand: string | null;
+    model: string | null;
+  } | null;
   screenProduct: { id: string; brand: string; sizeLabel: string | null } | null;
   soundOffer: { id: string; status: string; saleType: string } | null;
   mailOrderSupplier: { id: string; name: string; currency: string } | null;

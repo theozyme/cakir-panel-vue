@@ -269,6 +269,23 @@ const percentage = (amount: Prisma.Decimal, total: Prisma.Decimal): string =>
 
 const utcTimestampText = (date: Date): string => date.toISOString().replace("T", " ").slice(0, 23);
 
+// Vehicle-linked FX payments have a fixed original TRY reporting amount.
+// Manual and legacy movements retain their native currency.
+const supplierReportCurrency = Prisma.sql`CASE WHEN "source_type" = 'VEHICLE_OPERATION' AND "source_currency" = 'TRY' AND "source_amount" IS NOT NULL THEN 'TRY' ELSE "currency" END`;
+const supplierReportAmount = Prisma.sql`CASE WHEN "source_type" = 'VEHICLE_OPERATION' AND "source_currency" = 'TRY' AND "source_amount" IS NOT NULL THEN "source_amount" ELSE "amount" END`;
+
+const getMailOrderReportTotals = async (filter: ReportPeriodFilter) => {
+  const rows = await getPrisma().$queryRaw<Array<{ currency: string; amount: Prisma.Decimal }>>(Prisma.sql`
+    SELECT ${supplierReportCurrency} AS "currency", SUM(${supplierReportAmount}) AS "amount"
+    FROM "supplier_transactions"
+    WHERE "transaction_at" >= CAST(${utcTimestampText(filter.start)} AS timestamp)
+      AND "transaction_at" < CAST(${utcTimestampText(filter.end)} AS timestamp)
+      AND "type" = 'PAYMENT' AND "voided_at" IS NULL
+    GROUP BY 1
+  `);
+  return rows.map((row) => ({ currency: row.currency, _sum: { amount: row.amount } }));
+};
+
 const getTrendAggregateRows = async (
   filter: ReportPeriodFilter,
 ): Promise<{ revenue: TrendAggregateRow[]; mailOrder: TrendAggregateRow[] }> => {
@@ -297,7 +314,7 @@ const getTrendAggregateRows = async (
       ORDER BY 1, 2
     `),
     prisma.$queryRaw<TrendAggregateRow[]>(Prisma.sql`
-      SELECT ${transactionBucket} AS "bucket", "currency", SUM("amount") AS "amount"
+      SELECT ${transactionBucket} AS "bucket", ${supplierReportCurrency} AS "currency", SUM(${supplierReportAmount}) AS "amount"
       FROM "supplier_transactions"
       WHERE "transaction_at" >= CAST(${start} AS timestamp)
         AND "transaction_at" < CAST(${end} AS timestamp)
@@ -647,11 +664,6 @@ export const getReportsOverview = async (
 ): Promise<ReportsOverviewDto> => {
   const prisma = getPrisma();
   const operationWhere = { operationAt: { gte: filter.start, lt: filter.end }, deletedAt: null };
-  const supplierWhere = {
-    transactionAt: { gte: filter.start, lt: filter.end },
-    type: "PAYMENT" as const,
-    voidedAt: null,
-  };
   const specialPaymentFilter = parseSpecialPaymentPeriodFilter({
     period: filter.period,
     date: filter.date,
@@ -673,11 +685,7 @@ export const getReportsOverview = async (
       where: operationWhere,
       _sum: { price: true },
     }),
-    prisma.supplierTransaction.groupBy({
-      by: ["currency"],
-      where: supplierWhere,
-      _sum: { amount: true },
-    }),
+    getMailOrderReportTotals(filter),
     prisma.vehicleOperation.count({ where: operationWhere }),
     prisma.vehicleOperation.groupBy({ by: ["visitId"], where: operationWhere }),
     prisma.vehicleOperation.groupBy({

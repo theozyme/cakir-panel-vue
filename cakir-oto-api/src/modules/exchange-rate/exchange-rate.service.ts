@@ -1,114 +1,122 @@
 import { XMLParser } from "fast-xml-parser";
 import { Prisma } from "../../../generated/prisma/client.js";
-
 import { HttpError } from "../../lib/http-error.js";
 import type { UsdExchangeRateDto } from "./exchange-rate.types.js";
 
-const tcmbUrl = "https://www.tcmb.gov.tr/kurlar/today.xml";
 const freshCacheMs = 15 * 60 * 1000;
 const fallbackCacheMs = 24 * 60 * 60 * 1000;
-
-type CacheEntry = Omit<UsdExchangeRateDto, "isStale"> & {
-  fetchedAtMs: number;
-};
-
-let cachedRate: CacheEntry | null = null;
-
+type CacheEntry = UsdExchangeRateDto & { fetchedAtMs: number };
+const cache = new Map<string, CacheEntry>();
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
   trimValues: true,
 });
-
-const formatEffectiveDate = (value: unknown): string => {
-  if (typeof value !== "string") return "";
-
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : value.trim();
+const todayKey = () =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Istanbul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+export const validateRateDate = (value: unknown): string => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    throw new HttpError(400, "Kur tarihi YYYY-MM-DD olmali");
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== value ||
+    value > todayKey()
+  )
+    throw new HttpError(400, "Kur tarihi gecersiz veya gelecekte");
+  return value;
 };
 
-const fromCache = (entry: CacheEntry, isStale: boolean): UsdExchangeRateDto => ({
-  base: entry.base,
-  quote: entry.quote,
-  rate: entry.rate,
-  rateType: entry.rateType,
-  effectiveDate: entry.effectiveDate,
-  fetchedAt: entry.fetchedAt,
-  isStale,
-});
+export const parseUsdRateXml = (xml: string): Omit<UsdExchangeRateDto, "fetchedAt" | "isStale"> => {
+  const document = parser.parse(xml) as {
+    Tarih_Date?: { Tarih?: string; Date?: string; Currency?: unknown };
+  };
+  const header = document.Tarih_Date;
+  // Tarih is DD.MM.YYYY; the English Date attribute is MM/DD/YYYY.
+  const tr = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(header?.Tarih ?? ""));
+  const en = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(header?.Date ?? ""));
+  const effectiveDate = tr ? `${tr[3]}-${tr[2]}-${tr[1]}` : en ? `${en[3]}-${en[1]}-${en[2]}` : "";
+  validateRateDate(effectiveDate);
+  const currencies = Array.isArray(header?.Currency) ? header.Currency : [header?.Currency];
+  const usd = currencies.find(
+    (item) => item && typeof item === "object" && item.CurrencyCode === "USD",
+  ) as { ForexSelling?: unknown } | undefined;
+  if (typeof usd?.ForexSelling !== "string" && typeof usd?.ForexSelling !== "number")
+    throw new Error("TCMB USD ForexSelling bulunamadi");
+  const rate = new Prisma.Decimal(String(usd.ForexSelling));
+  if (!rate.isFinite() || !rate.greaterThan(0) || !rate.toDecimalPlaces(4).greaterThan(0))
+    throw new Error("TCMB USD ForexSelling gecersiz");
+  return {
+    base: "USD",
+    quote: "TRY",
+    rate: rate.toFixed(4),
+    rateType: "FOREX_SELLING",
+    effectiveDate,
+  };
+};
 
-export const getUsdExchangeRate = async (): Promise<UsdExchangeRateDto> => {
+const readXml = async (url: string): Promise<string | null> => {
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(5_000),
+    headers: { Accept: "application/xml,text/xml" },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`TCMB HTTP ${response.status}`);
+  return response.text();
+};
+const asDto = (
+  { fetchedAtMs: _ignored, ...entry }: CacheEntry,
+  isStale: boolean,
+): UsdExchangeRateDto => ({ ...entry, isStale });
+
+export const getUsdExchangeRate = async (date?: string): Promise<UsdExchangeRateDto> => {
+  const requestedDate = date === undefined ? todayKey() : validateRateDate(date);
+  const historical = requestedDate !== todayKey();
+  const key = historical ? requestedDate : `today:${requestedDate}`;
   const now = Date.now();
-
-  if (cachedRate && now - cachedRate.fetchedAtMs < freshCacheMs) {
-    return fromCache(cachedRate, false);
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5_000);
-
+  const cached = cache.get(key);
+  if (cached && (historical || now - cached.fetchedAtMs < freshCacheMs))
+    return asDto(cached, false);
   try {
-    const response = await fetch(tcmbUrl, {
-      signal: controller.signal,
-      headers: {
-        Accept: "application/xml,text/xml",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`TCMB HTTP ${response.status}`);
+    let parsed: ReturnType<typeof parseUsdRateXml> | null = null;
+    if (!historical) {
+      const xml = await readXml("https://www.tcmb.gov.tr/kurlar/today.xml");
+      if (!xml) throw new Error("Guncel TCMB kuru bulunamadi");
+      parsed = parseUsdRateXml(xml);
+    } else {
+      for (let offset = 0; offset <= 14; offset++) {
+        const day = new Date(`${requestedDate}T00:00:00Z`);
+        day.setUTCDate(day.getUTCDate() - offset);
+        const [year, month, dd] = day.toISOString().slice(0, 10).split("-");
+        const xml = await readXml(
+          `https://www.tcmb.gov.tr/kurlar/${year}${month}/${dd}${month}${year}.xml`,
+        );
+        if (xml === null) continue;
+        parsed = parseUsdRateXml(xml);
+        break;
+      }
     }
-
-    const xml = await response.text();
-    const document = parser.parse(xml) as {
-      Tarih_Date?: {
-        Date?: unknown;
-        Currency?: unknown;
-      };
+    if (!parsed || parsed.effectiveDate > requestedDate)
+      throw new Error("Islem tarihine uygun TCMB kuru bulunamadi");
+    const entry: CacheEntry = {
+      ...parsed,
+      fetchedAt: new Date().toISOString(),
+      fetchedAtMs: now,
+      isStale: false,
     };
-    const currencyValue = document.Tarih_Date?.Currency;
-    const currencies = Array.isArray(currencyValue) ? currencyValue : [currencyValue];
-    const usd = currencies.find((item): item is Record<string, unknown> =>
-      Boolean(
-        item &&
-        typeof item === "object" &&
-        (item as { CurrencyCode?: unknown }).CurrencyCode === "USD",
-      ),
-    );
-    const rawRate = usd?.ForexSelling;
-
-    if (typeof rawRate !== "string" && typeof rawRate !== "number") {
-      throw new Error("TCMB USD ForexSelling bulunamadi");
-    }
-
-    const rate = new Prisma.Decimal(String(rawRate));
-
-    if (!rate.isPositive()) {
-      throw new Error("TCMB USD ForexSelling gecersiz");
-    }
-
-    const fetchedAt = new Date();
-    cachedRate = {
-      base: "USD",
-      quote: "TRY",
-      rate: rate.toFixed(4),
-      rateType: "FOREX_SELLING",
-      effectiveDate: formatEffectiveDate(document.Tarih_Date?.Date),
-      fetchedAt: fetchedAt.toISOString(),
-      fetchedAtMs: fetchedAt.getTime(),
-    };
-
-    return fromCache(cachedRate, false);
+    cache.set(key, entry);
+    if (cache.size > 512) cache.delete(cache.keys().next().value!);
+    return asDto(entry, false);
   } catch (error) {
-    if (cachedRate && now - cachedRate.fetchedAtMs < fallbackCacheMs) {
-      return fromCache(cachedRate, true);
-    }
-
+    if (cached && now - cached.fetchedAtMs < fallbackCacheMs) return asDto(cached, true);
     throw new HttpError(
       503,
       error instanceof Error ? `TCMB kuru alinamadi: ${error.message}` : "TCMB kuru alinamadi",
     );
-  } finally {
-    clearTimeout(timeout);
   }
 };

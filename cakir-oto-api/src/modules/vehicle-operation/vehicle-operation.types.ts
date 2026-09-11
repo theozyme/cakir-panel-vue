@@ -59,6 +59,7 @@ export type CreateVehicleOperationResponse = {
 };
 
 export type VehicleOperationDetail = CreateVehicleOperationResponse & {
+  supplierPayment: ReturnType<typeof import("./payment-state.js").serializeSupplierPayment>;
   plate: string;
   customer: {
     firstName: string | null;

@@ -468,7 +468,10 @@ function MailOrder() {
               </thead>
               <tbody>
                 {transactionsQuery.data?.map((transaction) => (
-                  <tr key={transaction.id} className={`border-t border-border/60 ${transaction.voidedAt ? "opacity-55" : ""}`}>
+                  <tr
+                    key={transaction.id}
+                    className={`border-t border-border/60 ${transaction.voidedAt ? "opacity-55" : ""}`}
+                  >
                     <td className="px-3 py-2.5 text-muted-foreground">
                       {formatTransactionDate(transaction.transactionAt)}
                     </td>
@@ -497,6 +500,15 @@ function MailOrder() {
                           ? "+"
                           : ""}
                       {formatMoneyString(transaction.amount, transaction.currency)}
+                      {transaction.sourceAmount &&
+                        transaction.sourceCurrency === "TRY" &&
+                        transaction.exchangeRate && (
+                          <div className="mt-1 text-xs font-normal text-muted-foreground">
+                            {formatMoneyString(transaction.sourceAmount, "TRY")} · Kur:{" "}
+                            {transaction.exchangeRate} · {transaction.exchangeRateDate}
+                            {transaction.exchangeRateIsStale ? " · Önbellek" : ""}
+                          </div>
+                        )}
                     </td>
                   </tr>
                 ))}

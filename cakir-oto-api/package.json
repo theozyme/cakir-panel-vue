@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "test:integration": "tsx --test src/modules/stock-order/stock-order.integration.test.ts",
+    "test:mail-order": "tsx --test src/modules/vehicle-operation/payment-conversion.test.ts src/modules/vehicle-operation/payment-ledger.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio"
   },

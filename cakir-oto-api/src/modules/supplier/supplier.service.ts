@@ -1,4 +1,5 @@
 import { Prisma } from "../../../generated/prisma/client.js";
+import { emptyPaymentSnapshot, serializePaymentSnapshot } from "../vehicle-operation/payment-conversion.js";
 
 import { HttpError, isPrismaErrorCode } from "../../lib/http-error.js";
 import { moneyToString, parseMoney } from "../../lib/money.js";
@@ -355,6 +356,7 @@ export const listSupplierTransactions = async (
   });
 
   return rows.map((row) => ({
+    ...serializePaymentSnapshot(row),
     id: row.id,
     transactionAt: row.transactionAt.toISOString(),
     type: row.type as SupplierTransactionType,
@@ -548,6 +550,7 @@ export const createManualSupplierTransaction = async (
 
     return {
       id: row.id,
+      ...serializePaymentSnapshot(row),
       transactionAt: row.transactionAt.toISOString(),
       type: row.type,
       amount: moneyToString(row.amount),
@@ -560,46 +563,12 @@ export const createManualSupplierTransaction = async (
     };
   });
 
-export const createVehicleOperationSupplierPayment = async ({
-  tx,
-  supplierId,
-  operationId,
-  amount,
-  currency,
-  transactionAt,
-}: SupplierPaymentInput) => {
-  const supplier = await lockSupplier(tx, supplierId);
-  if (supplier.currency !== currency) {
-    throw new HttpError(400, "Operation currency supplier currency ile ayni olmali");
-  }
-
-  const latest = await latestLedgerTransaction(tx, supplierId);
-  const previousBalance = latest?.balanceAfter ?? zero();
-  const balanceAfter = previousBalance.minus(amount);
-  const ledgerTransactionAt =
-    latest && transactionAt.getTime() < latest.transactionAt.getTime()
-      ? latest.transactionAt
-      : transactionAt;
-
-  try {
-    return await tx.supplierTransaction.create({
-      data: {
-        supplierId,
-        type: "PAYMENT",
-        amount,
-        currency,
-        balanceAfter,
-        transactionAt: ledgerTransactionAt,
-        sourceType: "VEHICLE_OPERATION",
-        sourceId: operationId,
-      },
-    });
-  } catch (error) {
-    if (isPrismaErrorCode(error, "P2002")) {
-      throw new HttpError(409, "Bu operation icin supplier payment zaten mevcut");
-    }
-    throw error;
-  }
+export const createVehicleOperationSupplierPayment = async (input: SupplierPaymentInput) => {
+  const { tx, operationId, ...next } = input;
+  const active = await tx.supplierTransaction.findFirst({ where: { sourceType: "VEHICLE_OPERATION", sourceId: operationId, voidedAt: null } });
+  if (active) throw new HttpError(409, "Bu operation icin supplier payment zaten mevcut");
+  await reconcileVehicleOperationSupplierPayment({ tx, operationId, previous: null, next });
+  return tx.supplierTransaction.findFirstOrThrow({ where: { sourceType: "VEHICLE_OPERATION", sourceId: operationId, voidedAt: null } });
 };
 
 type LedgerBaseline = { supplierId: string; affectedAt: Date; balance: Prisma.Decimal };
@@ -733,6 +702,14 @@ export const reconcileVehicleOperationSupplierPayment = async ({
         type: "PAYMENT",
         amount: next.amount,
         currency: next.currency,
+        ...emptyPaymentSnapshot(),
+        sourceAmount: next.sourceAmount ?? null,
+        sourceCurrency: next.sourceCurrency ?? null,
+        exchangeRate: next.exchangeRate ?? null,
+        exchangeRateType: next.exchangeRateType ?? null,
+        exchangeRateDate: next.exchangeRateDate ?? null,
+        exchangeRateFetchedAt: next.exchangeRateFetchedAt ?? null,
+        exchangeRateIsStale: next.exchangeRateIsStale ?? null,
         balanceAfter: zero(),
         transactionAt: next.transactionAt,
         sourceType: "VEHICLE_OPERATION",

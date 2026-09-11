@@ -24,6 +24,7 @@ type Props = {
 };
 
 const invalidationRoots = [
+  "vehicle-operation",
   "vehicle-operations",
   "vehicle-history",
   "daily-operations",

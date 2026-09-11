@@ -1,6 +1,7 @@
 import type { Prisma } from "../../../generated/prisma/client.js";
 
 import type { BusinessTransaction } from "../../lib/transaction.js";
+import type { PaymentSnapshot, serializePaymentSnapshot } from "../vehicle-operation/payment-conversion.js";
 
 export type SupplierCurrency = "TRY" | "USD";
 export type SupplierPeriod = "day" | "month" | "year";
@@ -39,7 +40,7 @@ export type SupplierLookupDto = {
   currency: SupplierCurrency;
 };
 
-export type SupplierTransactionDto = {
+export type SupplierTransactionDto = ReturnType<typeof serializePaymentSnapshot> & {
   id: string;
   transactionAt: string;
   type: SupplierTransactionType;
@@ -70,7 +71,7 @@ export type ManualSupplierTransactionInput = {
   transactionAt: Date | null;
 };
 
-export type SupplierPaymentInput = {
+export type SupplierPaymentInput = Partial<PaymentSnapshot> & {
   tx: BusinessTransaction;
   supplierId: string;
   operationId: string;
@@ -79,7 +80,7 @@ export type SupplierPaymentInput = {
   transactionAt: Date;
 };
 
-export type VehicleOperationSupplierPaymentState = {
+export type VehicleOperationSupplierPaymentState = Partial<PaymentSnapshot> & {
   supplierId: string;
   amount: Prisma.Decimal;
   currency: string;

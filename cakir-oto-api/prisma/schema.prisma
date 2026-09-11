@@ -449,6 +449,13 @@ model SupplierTransaction {
   sourceId      String?                       @map("source_id")
   createdAt     DateTime                      @default(now()) @map("created_at")
   voidedAt      DateTime?                     @map("voided_at")
+  sourceAmount   Decimal? @map("source_amount") @db.Decimal(14, 2)
+  sourceCurrency String? @map("source_currency") @db.VarChar(3)
+  exchangeRate Decimal? @map("exchange_rate") @db.Decimal(14, 4)
+  exchangeRateType String? @map("exchange_rate_type") @db.VarChar(30)
+  exchangeRateDate String? @map("exchange_rate_date") @db.VarChar(10)
+  exchangeRateFetchedAt DateTime? @map("exchange_rate_fetched_at")
+  exchangeRateIsStale Boolean? @map("exchange_rate_is_stale")
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
