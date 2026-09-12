@@ -26,6 +26,7 @@ export type CurrencySummary = {
 export type SupplierSummaryDto = Record<SupplierCurrency, CurrencySummary>;
 
 export type SupplierDto = {
+  isActive: boolean;
   id: string;
   name: string;
   currency: SupplierCurrency;

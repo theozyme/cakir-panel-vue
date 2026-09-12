@@ -37,6 +37,7 @@ import type {
   DailyVehicleVisit,
   PendingVehicle,
   VehicleLookupResponse,
+  UsdExchangeRate,
 } from "@/types/business";
 import type { DashboardFinance, DashboardPaymentPeriod } from "@/types/reports";
 
@@ -45,7 +46,7 @@ interface DashboardMetricProps {
   value: string | number;
   icon: ReactNode;
   tone?: "default" | "success" | "warning" | "destructive" | "primary";
-  hint?: string;
+  hint?: ReactNode;
 }
 
 const metricTone = {
@@ -189,6 +190,12 @@ function Dashboard() {
   const [financeCurrency, setFinanceCurrency] = useState<Currency>("TRY");
   const [paymentPeriod, setPaymentPeriod] = useState<DashboardPaymentPeriod>("month");
   const [expandedVisitId, setExpandedVisitId] = useState<string | null>(null);
+  const exchangeRateQuery = useQuery({
+    queryKey: ["exchange-rate", "usd", "current"],
+    queryFn: () => apiRequest<UsdExchangeRate>("/api/exchange-rates/usd"),
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
   const pendingQuery = useQuery({
     queryKey: ["pending-vehicles"],
     queryFn: () => apiRequest<PendingVehicle[]>("/api/pending-vehicles"),
@@ -327,6 +334,41 @@ function Dashboard() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="rounded-lg border border-border bg-card px-3 py-2"
+            aria-label="Güncel USD TL kuru"
+          >
+            {exchangeRateQuery.data ? (
+              <>
+                <div className="text-xs font-semibold tabular-nums">
+                  1 USD ={" "}
+                  {Number(exchangeRateQuery.data.rate).toLocaleString("tr-TR", {
+                    minimumFractionDigits: 4,
+                    maximumFractionDigits: 4,
+                  })}{" "}
+                  TL
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  TCMB döviz satış ·{" "}
+                  {exchangeRateQuery.data.effectiveDate.split("-").reverse().join(".")}
+                  {(exchangeRateQuery.data.isStale || exchangeRateQuery.isError) &&
+                    " · Son kayıtlı kur"}
+                </div>
+              </>
+            ) : exchangeRateQuery.isError ? (
+              <button
+                type="button"
+                onClick={() => void exchangeRateQuery.refetch()}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Kur alınamadı · Tekrar dene
+              </button>
+            ) : (
+              <span role="status" className="text-xs text-muted-foreground">
+                USD/TL kuru yükleniyor…
+              </span>
+            )}
+          </div>
           {!isToday && (
             <button
               type="button"
@@ -389,11 +431,18 @@ function Dashboard() {
           hint="Seçili günün toplam kazancı"
         />
         <DashboardMetric
-          label="Aylık Ortalama Kazanç"
-          value={monthlyAverageValue}
+          label="Günlük Ortalama Kazanç"
+          value={monthlyDailyAverageValue}
           icon={<CalendarRange className="h-5 w-5" />}
           tone="success"
-          hint={`İlgili ay günlük ort.: ${monthlyDailyAverageValue}`}
+          hint={
+            <>
+              <div className="text-xs font-medium text-foreground">
+                Aylık ortalama: {monthlyAverageValue}
+              </div>
+              <div className="mt-1">Günlük: ay başından seçili güne · Aylık: son 12 ay</div>
+            </>
+          }
         />
       </section>
 

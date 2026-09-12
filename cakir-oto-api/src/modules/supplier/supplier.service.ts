@@ -51,6 +51,21 @@ export const createSupplier = async (body: unknown): Promise<SupplierLookupDto> 
   }
 };
 
+export const updateSupplierStatus = async (supplierId: string, body: unknown) => {
+  const { isActive } = asRecord(body);
+  if (typeof isActive !== "boolean") throw new HttpError(400, "isActive boolean olmali");
+  try {
+    return await getPrisma().supplier.update({
+      where: { id: supplierId },
+      data: { isActive },
+      select: { id: true, isActive: true },
+    });
+  } catch (error) {
+    if (isPrismaErrorCode(error, "P2025")) throw new HttpError(404, "Firma bulunamadi");
+    throw error;
+  }
+};
+
 type DateParts = {
   year: number;
   month: number;
@@ -221,7 +236,7 @@ const asCurrency = (value: string): SupplierCurrency => {
 
 const latestActiveBalances = async () =>
   getPrisma().supplierTransaction.findMany({
-    where: { supplier: { isActive: true }, balanceAfter: { not: null }, voidedAt: null },
+    where: { balanceAfter: { not: null }, voidedAt: null },
     distinct: ["supplierId"],
     orderBy: [
       { supplierId: "asc" },
@@ -232,19 +247,18 @@ const latestActiveBalances = async () =>
     select: { supplierId: true, balanceAfter: true },
   });
 
-export const listActiveSuppliers = async (filter: SupplierPeriodFilter): Promise<SupplierDto[]> => {
+export const listActiveSuppliers = async (filter: SupplierPeriodFilter, includeInactive = false): Promise<SupplierDto[]> => {
   const prisma = getPrisma();
   const [suppliers, balances, periodTotals] = await Promise.all([
     prisma.supplier.findMany({
-      where: { isActive: true },
+      where: includeInactive ? {} : { isActive: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, currency: true },
+      select: { id: true, name: true, currency: true, isActive: true },
     }),
     latestActiveBalances(),
     prisma.supplierTransaction.groupBy({
       by: ["supplierId", "type"],
       where: {
-        supplier: { isActive: true },
         voidedAt: null,
         transactionAt: { gte: filter.start, lt: filter.end },
         type: { in: ["DEBT_INCREASE", "PAYMENT"] },
@@ -269,6 +283,7 @@ export const listActiveSuppliers = async (filter: SupplierPeriodFilter): Promise
     const totals = totalsBySupplier.get(supplier.id) ?? { debt: zero(), payments: zero() };
     return {
       id: supplier.id,
+      isActive: supplier.isActive,
       name: supplier.name,
       currency: asCurrency(supplier.currency),
       currentBalance: moneyToString(balanceBySupplier.get(supplier.id) ?? zero()),
@@ -284,14 +299,12 @@ export const getSupplierSummary = async (
   const prisma = getPrisma();
   const [suppliers, balances, periodTotals] = await Promise.all([
     prisma.supplier.findMany({
-      where: { isActive: true },
       select: { id: true, currency: true },
     }),
     latestActiveBalances(),
     prisma.supplierTransaction.groupBy({
       by: ["currency", "type"],
       where: {
-        supplier: { isActive: true },
         voidedAt: null,
         transactionAt: { gte: filter.start, lt: filter.end },
         type: { in: ["DEBT_INCREASE", "PAYMENT"] },
@@ -431,7 +444,6 @@ export const getSupplierTrend = async (
 ): Promise<SupplierTrendItemDto[]> => {
   const rows = await getPrisma().supplierTransaction.findMany({
     where: {
-      supplier: { isActive: true },
       voidedAt: null,
       transactionAt: { gte: filter.start, lt: filter.end },
       type: { in: ["DEBT_INCREASE", "PAYMENT"] },

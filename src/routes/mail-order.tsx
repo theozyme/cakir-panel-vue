@@ -160,6 +160,111 @@ function TrendChart({ currency, data }: { currency: Currency; data: MailOrderTre
   );
 }
 
+function SupplierPaymentChart({
+  currency,
+  suppliers,
+  selected,
+  onSelect,
+}: {
+  currency: Currency;
+  suppliers: MailOrderSupplier[];
+  selected: string;
+  onSelect: (id: string) => void;
+}) {
+  const rows = suppliers
+    .filter((supplier) => supplier.currency === currency)
+    .map((supplier) => ({ ...supplier, payment: new Decimal(supplier.periodPayments) }))
+    .sort((a, b) => b.payment.comparedTo(a.payment) || a.name.localeCompare(b.name, "tr"));
+  const total = rows.reduce((sum, row) => sum.plus(row.payment), new Decimal(0));
+  const maximum = rows[0]?.payment ?? new Decimal(0);
+  const paidCount = rows.filter((row) => row.payment.isPositive()).length;
+  const label = currency === "TRY" ? "TL" : "USD";
+  const barColor = currency === "TRY" ? "bg-primary" : "bg-success";
+
+  return (
+    <section
+      className="min-w-0 rounded-xl border border-border/60 bg-background/50 p-4 sm:p-5"
+      aria-label={`${label} firma ödemeleri`}
+    >
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-4">
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+            <span className={`h-2.5 w-2.5 rounded-full ${barColor}`} aria-hidden="true" />
+            {label} hesapları
+          </div>
+          <p className="text-2xl font-bold tracking-tight tabular-nums">
+            {formatMoneyString(total.toFixed(2), currency)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Seçili dönemde toplam ödeme</p>
+        </div>
+        <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
+          {paidCount} / {rows.length} firmaya ödeme
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          {label} hesabı olan firma bulunmuyor.
+        </p>
+      ) : (
+        <>
+          {total.isZero() && (
+            <p className="mb-3 rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
+              Bu dönemde ödeme yapılmadı.
+            </p>
+          )}
+          <div className="mb-2 flex justify-between px-2 text-[11px] font-medium text-muted-foreground">
+            <span>Firma · tutara göre sıralı</span>
+            <span>Ödenen / toplam içindeki pay</span>
+          </div>
+          <ul className="space-y-1">
+            {rows.map((row) => {
+              const width = maximum.isPositive()
+                ? row.payment.div(maximum).times(100).toNumber()
+                : 0;
+              const share = total.isPositive() ? row.payment.div(total).times(100).toNumber() : 0;
+              return (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(row.id)}
+                    aria-label={`${row.name}: ${formatMoneyString(row.periodPayments, currency)}. Hesap hareketlerini görüntüle`}
+                    className={`w-full rounded-lg p-2 text-left transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected === row.id ? "bg-muted/70" : ""}`}
+                  >
+                    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
+                      <span className="min-w-0 break-words font-semibold">
+                        {row.name}
+                        {!row.isActive && (
+                          <span className="ml-2 text-[10px] font-normal text-muted-foreground">
+                            Pasif
+                          </span>
+                        )}
+                      </span>
+                      <span className="ml-auto flex shrink-0 items-baseline gap-2 tabular-nums">
+                        <span className="font-bold">
+                          {formatMoneyString(row.periodPayments, currency)}
+                        </span>
+                        <span className="w-12 text-right text-xs text-muted-foreground">
+                          %{share.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-3 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                      <div
+                        className={`h-full rounded-full ${barColor}`}
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 function MailOrder() {
   const initialDate = useMemo(getIstanbulDate, []);
   const queryClient = useQueryClient();
@@ -172,6 +277,41 @@ function MailOrder() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [transactionAt, setTransactionAt] = useState("");
+  const [firmDialogOpen, setFirmDialogOpen] = useState(false);
+  const [firmName, setFirmName] = useState("");
+  const [firmCurrency, setFirmCurrency] = useState<Currency>("TRY");
+
+  const refreshSuppliers = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["mail-order"] }),
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] }),
+    ]);
+  const createFirmMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<{ id: string }>("/api/suppliers", {
+        method: "POST",
+        body: JSON.stringify({ name: firmName.trim(), currency: firmCurrency }),
+      }),
+    onSuccess: async (supplier) => {
+      await refreshSuppliers();
+      setSelected(supplier.id);
+      setFirmDialogOpen(false);
+      toast.success("Firma eklendi");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const statusMutation = useMutation({
+    mutationFn: (supplier: MailOrderSupplier) =>
+      apiRequest(`/api/suppliers/${supplier.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: !supplier.isActive }),
+      }),
+    onSuccess: async (_result, supplier) => {
+      await refreshSuppliers();
+      toast.success(supplier.isActive ? "Firma pasife alındı" : "Firma aktif edildi");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const filterQuery = useMemo(() => {
     const params = new URLSearchParams({ period, year: String(year) });
@@ -186,7 +326,8 @@ function MailOrder() {
   });
   const suppliersQuery = useQuery({
     queryKey: ["mail-order", "suppliers", filterQuery],
-    queryFn: () => apiRequest<MailOrderSupplier[]>(`/api/suppliers?${filterQuery}`),
+    queryFn: () =>
+      apiRequest<MailOrderSupplier[]>(`/api/suppliers?includeInactive=true&${filterQuery}`),
   });
   const trendQuery = useQuery({
     queryKey: ["mail-order", "trend", filterQuery],
@@ -263,6 +404,15 @@ function MailOrder() {
   const summary = summaryQuery.data ?? emptySummary;
   const trend = trendQuery.data ?? [];
   const periodLabel = period === "day" ? "Günlük" : period === "month" ? "Aylık" : "Yıllık";
+  const selectedPeriodLabel =
+    period === "year"
+      ? String(year)
+      : new Intl.DateTimeFormat("tr-TR", {
+          month: "long",
+          year: "numeric",
+          ...(period === "day" ? { day: "numeric" as const } : {}),
+          timeZone: "UTC",
+        }).format(new Date(Date.UTC(year, month - 1, period === "day" ? day : 1)));
   const dataError = summaryQuery.error ?? suppliersQuery.error ?? trendQuery.error;
 
   return (
@@ -387,7 +537,19 @@ function MailOrder() {
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <div className="card-elevated p-5">
-          <h2 className="mb-3 text-base font-bold">Firmalar</h2>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-base font-bold">Firmalar</h2>
+            <button
+              onClick={() => {
+                setFirmName("");
+                setFirmCurrency("TRY");
+                setFirmDialogOpen(true);
+              }}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Yeni Firma Ekle
+            </button>
+          </div>
           <div className="space-y-2">
             {suppliersQuery.isLoading && (
               <div className="py-8 text-center text-sm text-muted-foreground">
@@ -408,7 +570,12 @@ function MailOrder() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="truncate text-sm font-semibold">{supplier.name}</div>
+                  <div className="truncate text-sm font-semibold">
+                    {supplier.name}
+                    {!supplier.isActive && (
+                      <span className="ml-2 text-xs text-muted-foreground">Pasif</span>
+                    )}
+                  </div>
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold">
                     {supplier.currency}
                   </span>
@@ -434,21 +601,32 @@ function MailOrder() {
           </div>
         </div>
 
-        <div className="card-elevated p-5 lg:col-span-2">
+        <div id="mail-order-account" className="card-elevated scroll-mt-6 p-5 lg:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-bold">
               {active ? `${active.name} · Hesap Hareketleri` : "Hesap Hareketleri"}
             </h2>
             <div className="flex gap-2">
               <button
-                disabled={!active}
+                disabled={!active || statusMutation.isPending}
+                onClick={() => active && statusMutation.mutate(active)}
+                className="h-9 rounded-lg border border-input px-3 text-xs font-bold disabled:opacity-40"
+              >
+                {statusMutation.isPending
+                  ? "Kaydediliyor…"
+                  : active?.isActive
+                    ? "Pasife Al"
+                    : "Aktife Al"}
+              </button>
+              <button
+                disabled={!active?.isActive}
                 onClick={() => openDialog("payment")}
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-success px-3 text-xs font-bold text-success-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus className="h-3.5 w-3.5" /> Yeni Ödeme
               </button>
               <button
-                disabled={!active}
+                disabled={!active?.isActive}
                 onClick={() => openDialog("debt")}
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-destructive px-3 text-xs font-bold text-destructive-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -545,18 +723,118 @@ function MailOrder() {
       </div>
 
       <div className="mt-6 card-elevated p-5">
-        <h2 className="mb-4 text-base font-bold">{periodLabel} Mail Order Hareketi</h2>
-        {trendQuery.isLoading ? (
-          <div className="grid h-60 place-items-center text-sm text-muted-foreground">
-            Grafik yükleniyor…
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">{periodLabel} Mail Order Hareketi</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tüm firmalara yapılan ödemeler, tek bakışta.
+            </p>
           </div>
+          <span className="rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-semibold">
+            {selectedPeriodLabel}
+          </span>
+        </div>
+        {suppliersQuery.isLoading ? (
+          <div role="status" className="grid h-60 place-items-center text-sm text-muted-foreground">
+            Firma ödemeleri yükleniyor…
+          </div>
+        ) : suppliersQuery.isError ? (
+          <p role="alert" className="py-8 text-center text-sm text-destructive">
+            Firma ödemeleri alınamadı. Sayfayı yenileyerek tekrar deneyin.
+          </p>
         ) : (
-          <div className="grid gap-6 xl:grid-cols-2">
-            <TrendChart currency="TRY" data={trend} />
-            <TrendChart currency="USD" data={trend} />
+          <div className="grid items-start gap-4 xl:grid-cols-2">
+            {(["TRY", "USD"] as const).map((currency) => (
+              <SupplierPaymentChart
+                key={currency}
+                currency={currency}
+                suppliers={suppliers}
+                selected={selected}
+                onSelect={(id) => {
+                  setSelected(id);
+                  document
+                    .getElementById("mail-order-account")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              />
+            ))}
           </div>
         )}
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Her para birimi kendi içinde karşılaştırılır. Pasif firmalar ve ödeme yapılmayan firmalar
+          dahildir. Hesap hareketlerini açmak için firma satırına tıklayın.
+        </p>
+        <details className="mt-5 border-t border-border/60 pt-4">
+          <summary className="cursor-pointer text-sm font-semibold">
+            Zaman içindeki mal girişi ve ödemeler
+          </summary>
+          {trendQuery.isLoading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Grafik yükleniyor…</p>
+          ) : trendQuery.isError ? (
+            <p className="py-8 text-center text-sm text-destructive">Hareket grafiği alınamadı.</p>
+          ) : (
+            <div className="mt-4 grid gap-6 xl:grid-cols-2">
+              <TrendChart currency="TRY" data={trend} />
+              <TrendChart currency="USD" data={trend} />
+            </div>
+          )}
+        </details>
       </div>
+
+      <Dialog open={firmDialogOpen} onOpenChange={setFirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Yeni Firma Ekle</DialogTitle>
+            <DialogDescription>Firma adını ve hesabın para birimini girin.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (firmName.trim() && !createFirmMutation.isPending) createFirmMutation.mutate();
+            }}
+          >
+            <label className="block text-sm font-semibold">
+              Firma adı
+              <input
+                required
+                autoFocus
+                maxLength={150}
+                value={firmName}
+                onChange={(event) => setFirmName(event.target.value)}
+                className={`${inputCls} mt-1`}
+              />
+            </label>
+            <label className="block text-sm font-semibold">
+              Para birimi
+              <select
+                value={firmCurrency}
+                onChange={(event) => setFirmCurrency(event.target.value as Currency)}
+                className={`${inputCls} mt-1`}
+              >
+                <option value="TRY">TL</option>
+                <option value="USD">USD</option>
+              </select>
+            </label>
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => setFirmDialogOpen(false)}
+                className="h-10 rounded-lg border border-input px-4 text-sm font-semibold"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                disabled={!firmName.trim() || createFirmMutation.isPending}
+                className="h-10 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground disabled:opacity-50"
+              >
+                {createFirmMutation.isPending ? "Kaydediliyor…" : "Kaydet"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogKind !== null} onOpenChange={(open) => !open && setDialogKind(null)}>
         <DialogContent>

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import {
   createSupplier,
+  updateSupplierStatus,
   createManualSupplierTransaction,
   getSupplierSummary,
   getSupplierTrend,
@@ -26,7 +27,15 @@ const supplierIdFrom = (req: Request): string => {
 
 export const getSuppliers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    res.json(await listActiveSuppliers(parseSupplierPeriodFilter(req.query)));
+    res.json(await listActiveSuppliers(parseSupplierPeriodFilter(req.query), req.query.includeInactive === "true"));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const patchSupplierStatus = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await updateSupplierStatus(supplierIdFrom(req), req.body));
   } catch (error) {
     next(error);
   }

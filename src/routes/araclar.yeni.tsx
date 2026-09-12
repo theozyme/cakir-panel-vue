@@ -493,6 +493,10 @@ function VehicleOperationForm() {
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          if (paymentMethod === "MAIL_ORDER" && !selectedSupplier) {
+            toast.error("Aktif bir mail order firması seçin");
+            return;
+          }
           mutation.mutate();
         }}
         className="grid gap-4 lg:grid-cols-3"
@@ -719,20 +723,11 @@ function VehicleOperationForm() {
                 <select
                   disabled={correcting}
                   required
-                  value={supplierId}
+                  value={selectedSupplier ? supplierId : ""}
                   onChange={(e) => setSupplierId(e.target.value)}
                   className={inputClass}
                 >
                   <option value="">Toptancı seç...</option>
-                  {detailQuery.data?.mailOrderSupplier &&
-                    !supplierQuery.data?.some(
-                      (supplier) => supplier.id === detailQuery.data?.mailOrderSupplier?.id,
-                    ) && (
-                      <option value={detailQuery.data.mailOrderSupplier.id}>
-                        {detailQuery.data.mailOrderSupplier.name} (
-                        {detailQuery.data.mailOrderSupplier.currency}) · Mevcut kayıt
-                      </option>
-                    )}
                   {supplierQuery.data?.map((supplier) => (
                     <option key={supplier.id} value={supplier.id}>
                       {supplier.name} ({supplier.currency})

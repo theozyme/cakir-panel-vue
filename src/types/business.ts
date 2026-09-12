@@ -105,6 +105,7 @@ export type Supplier = {
 export type MailOrderPeriod = "day" | "month" | "year";
 
 export type MailOrderSupplier = Supplier & {
+  isActive: boolean;
   currentBalance: string;
   periodDebtIncrease: string;
   periodPayments: string;
