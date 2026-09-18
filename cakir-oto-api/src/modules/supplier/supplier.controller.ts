@@ -5,12 +5,21 @@ import {
   updateSupplierStatus,
   createManualSupplierTransaction,
   getSupplierSummary,
+  getSupplierExport,
   getSupplierTrend,
   listActiveSuppliers,
   listSupplierTransactions,
   parseManualSupplierTransaction,
   parseSupplierPeriodFilter,
 } from "./supplier.service.js";
+
+export const getExport = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await getSupplierExport());
+  } catch (error) {
+    next(error);
+  }
+};
 
 export const postSupplier = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -27,7 +36,12 @@ const supplierIdFrom = (req: Request): string => {
 
 export const getSuppliers = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    res.json(await listActiveSuppliers(parseSupplierPeriodFilter(req.query), req.query.includeInactive === "true"));
+    res.json(
+      await listActiveSuppliers(
+        parseSupplierPeriodFilter(req.query),
+        req.query.includeInactive === "true",
+      ),
+    );
   } catch (error) {
     next(error);
   }

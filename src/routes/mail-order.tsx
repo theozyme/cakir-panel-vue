@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { FileSpreadsheet, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -26,9 +26,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/api";
+import { exportMailOrderWorkbook } from "@/lib/mail-order-excel";
 import { formatMoneyString } from "@/lib/money";
 import type {
   Currency,
+  MailOrderExport,
   MailOrderPeriod,
   MailOrderSummary,
   MailOrderSupplier,
@@ -280,6 +282,7 @@ function MailOrder() {
   const [firmDialogOpen, setFirmDialogOpen] = useState(false);
   const [firmName, setFirmName] = useState("");
   const [firmCurrency, setFirmCurrency] = useState<Currency>("TRY");
+  const [isExporting, setIsExporting] = useState(false);
 
   const refreshSuppliers = () =>
     Promise.all([
@@ -401,6 +404,23 @@ function MailOrder() {
     transactionMutation.mutate({ kind: dialogKind, payload });
   };
 
+  const exportAllYears = async () => {
+    setIsExporting(true);
+    try {
+      const exportData = await apiRequest<MailOrderExport>("/api/suppliers/export");
+      if (exportData.years.length === 0) {
+        toast.error("Excel'e aktarılacak mail order hareketi bulunamadı");
+        return;
+      }
+      await exportMailOrderWorkbook(exportData);
+      toast.success("Tüm yılların Excel raporu indirildi");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Excel raporu oluşturulamadı");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const summary = summaryQuery.data ?? emptySummary;
   const trend = trendQuery.data ?? [];
   const periodLabel = period === "day" ? "Günlük" : period === "month" ? "Aylık" : "Yıllık";
@@ -480,6 +500,16 @@ function MailOrder() {
           </label>
         )}
         <div className="pb-2 text-xs text-muted-foreground">Saat dilimi: Europe/Istanbul</div>
+        <button
+          type="button"
+          disabled={isExporting}
+          onClick={() => void exportAllYears()}
+          className="ml-auto inline-flex h-10 items-center gap-2 rounded-lg bg-success px-4 text-sm font-bold text-success-foreground hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+          title="Tüm firmaların tüm yıllardaki mal girişi ve ödeme hareketlerini Excel'e aktar"
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          {isExporting ? "Excel hazırlanıyor…" : "Tüm Yılları Excel'e Aktar"}
+        </button>
       </div>
 
       {dataError && (

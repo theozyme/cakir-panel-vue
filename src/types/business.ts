@@ -149,6 +149,31 @@ export type MailOrderTrendItem = {
   USD: { debtIncrease: string; payments: string };
 };
 
+export type MailOrderExportTotals = Record<Currency, { debtIncrease: string; payments: string }>;
+
+export type MailOrderExportTransaction = {
+  id: string;
+  supplierName: string;
+  supplierIsActive: boolean;
+  transactionAt: string;
+  type: "DEBT_INCREASE" | "PAYMENT";
+  amount: string;
+  currency: Currency;
+  balanceAfter: string | null;
+  note: string | null;
+  sourceType: "MANUAL" | "VEHICLE_OPERATION" | "MIGRATION";
+};
+
+export type MailOrderExport = {
+  generatedAt: string;
+  overall: MailOrderExportTotals;
+  years: Array<{
+    year: number;
+    totals: MailOrderExportTotals;
+    transactions: MailOrderExportTransaction[];
+  }>;
+};
+
 export type UsdExchangeRate = {
   base: "USD";
   quote: "TRY";

@@ -1,5 +1,8 @@
 import { Prisma } from "../../../generated/prisma/client.js";
-import { emptyPaymentSnapshot, serializePaymentSnapshot } from "../vehicle-operation/payment-conversion.js";
+import {
+  emptyPaymentSnapshot,
+  serializePaymentSnapshot,
+} from "../vehicle-operation/payment-conversion.js";
 
 import { HttpError, isPrismaErrorCode } from "../../lib/http-error.js";
 import { moneyToString, parseMoney } from "../../lib/money.js";
@@ -10,6 +13,8 @@ import type {
   ManualSupplierTransactionInput,
   SupplierCurrency,
   SupplierDto,
+  SupplierExportDto,
+  SupplierExportTotalsDto,
   SupplierLookupDto,
   SupplierPaymentInput,
   SupplierPeriod,
@@ -25,6 +30,10 @@ import type {
 const timeZone = "Europe/Istanbul";
 const zero = () => new Prisma.Decimal(0);
 const emptyTrendValues = (): TrendCurrencyValues => ({ debtIncrease: "0.00", payments: "0.00" });
+const emptyExportTotals = (): SupplierExportTotalsDto => ({
+  TRY: { debtIncrease: "0.00", payments: "0.00" },
+  USD: { debtIncrease: "0.00", payments: "0.00" },
+});
 
 export const createSupplier = async (body: unknown): Promise<SupplierLookupDto> => {
   const values = asRecord(body);
@@ -247,7 +256,10 @@ const latestActiveBalances = async () =>
     select: { supplierId: true, balanceAfter: true },
   });
 
-export const listActiveSuppliers = async (filter: SupplierPeriodFilter, includeInactive = false): Promise<SupplierDto[]> => {
+export const listActiveSuppliers = async (
+  filter: SupplierPeriodFilter,
+  includeInactive = false,
+): Promise<SupplierDto[]> => {
   const prisma = getPrisma();
   const [suppliers, balances, periodTotals] = await Promise.all([
     prisma.supplier.findMany({
@@ -349,6 +361,86 @@ export const getSupplierSummary = async (
       payments: moneyToString(totals.USD.payments),
       remainingDebt: moneyToString(totals.USD.remainingDebt),
     },
+  };
+};
+
+export const getSupplierExport = async (): Promise<SupplierExportDto> => {
+  const rows = await getPrisma().supplierTransaction.findMany({
+    where: {
+      voidedAt: null,
+      type: { in: ["DEBT_INCREASE", "PAYMENT"] },
+    },
+    orderBy: [{ transactionAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      transactionAt: true,
+      type: true,
+      amount: true,
+      currency: true,
+      balanceAfter: true,
+      note: true,
+      sourceType: true,
+      supplier: { select: { name: true, isActive: true } },
+    },
+  });
+
+  type DecimalTotals = Record<
+    SupplierCurrency,
+    { debtIncrease: Prisma.Decimal; payments: Prisma.Decimal }
+  >;
+  const newDecimalTotals = (): DecimalTotals => ({
+    TRY: { debtIncrease: zero(), payments: zero() },
+    USD: { debtIncrease: zero(), payments: zero() },
+  });
+  const overall = newDecimalTotals();
+  const byYear = new Map<
+    number,
+    { totals: DecimalTotals; transactions: SupplierExportDto["years"][number]["transactions"] }
+  >();
+
+  for (const row of rows) {
+    const currency = asCurrency(row.currency);
+    const year = datePartsInIstanbul(row.transactionAt).year;
+    const yearData = byYear.get(year) ?? { totals: newDecimalTotals(), transactions: [] };
+    const totalKey = row.type === "DEBT_INCREASE" ? "debtIncrease" : "payments";
+    overall[currency][totalKey] = overall[currency][totalKey].plus(row.amount);
+    yearData.totals[currency][totalKey] = yearData.totals[currency][totalKey].plus(row.amount);
+    yearData.transactions.push({
+      id: row.id,
+      supplierName: row.supplier.name,
+      supplierIsActive: row.supplier.isActive,
+      transactionAt: row.transactionAt.toISOString(),
+      type: row.type as "DEBT_INCREASE" | "PAYMENT",
+      amount: moneyToString(row.amount),
+      currency,
+      balanceAfter: row.balanceAfter ? moneyToString(row.balanceAfter) : null,
+      note: row.note,
+      sourceType: row.sourceType,
+    });
+    byYear.set(year, yearData);
+  }
+
+  const serializeTotals = (totals: DecimalTotals): SupplierExportTotalsDto => ({
+    TRY: {
+      debtIncrease: moneyToString(totals.TRY.debtIncrease),
+      payments: moneyToString(totals.TRY.payments),
+    },
+    USD: {
+      debtIncrease: moneyToString(totals.USD.debtIncrease),
+      payments: moneyToString(totals.USD.payments),
+    },
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    overall: rows.length ? serializeTotals(overall) : emptyExportTotals(),
+    years: [...byYear.entries()]
+      .sort(([first], [second]) => second - first)
+      .map(([year, data]) => ({
+        year,
+        totals: serializeTotals(data.totals),
+        transactions: data.transactions,
+      })),
   };
 };
 
@@ -577,10 +669,14 @@ export const createManualSupplierTransaction = async (
 
 export const createVehicleOperationSupplierPayment = async (input: SupplierPaymentInput) => {
   const { tx, operationId, ...next } = input;
-  const active = await tx.supplierTransaction.findFirst({ where: { sourceType: "VEHICLE_OPERATION", sourceId: operationId, voidedAt: null } });
+  const active = await tx.supplierTransaction.findFirst({
+    where: { sourceType: "VEHICLE_OPERATION", sourceId: operationId, voidedAt: null },
+  });
   if (active) throw new HttpError(409, "Bu operation icin supplier payment zaten mevcut");
   await reconcileVehicleOperationSupplierPayment({ tx, operationId, previous: null, next });
-  return tx.supplierTransaction.findFirstOrThrow({ where: { sourceType: "VEHICLE_OPERATION", sourceId: operationId, voidedAt: null } });
+  return tx.supplierTransaction.findFirstOrThrow({
+    where: { sourceType: "VEHICLE_OPERATION", sourceId: operationId, voidedAt: null },
+  });
 };
 
 type LedgerBaseline = { supplierId: string; affectedAt: Date; balance: Prisma.Decimal };
@@ -632,10 +728,7 @@ const resolveLedgerBaseline = async (
   };
 };
 
-const recalculateLedgerFrom = async (
-  tx: SupplierPaymentInput["tx"],
-  baseline: LedgerBaseline,
-) => {
+const recalculateLedgerFrom = async (tx: SupplierPaymentInput["tx"], baseline: LedgerBaseline) => {
   const rows = await tx.supplierTransaction.findMany({
     where: {
       supplierId: baseline.supplierId,
@@ -652,7 +745,10 @@ const recalculateLedgerFrom = async (
     }
     balance = balance.plus(signedLedgerEffect(row.type, row.amount));
     if (!row.balanceAfter.equals(balance)) {
-      await tx.supplierTransaction.update({ where: { id: row.id }, data: { balanceAfter: balance } });
+      await tx.supplierTransaction.update({
+        where: { id: row.id },
+        data: { balanceAfter: balance },
+      });
     }
   }
 };
@@ -669,8 +765,8 @@ export const reconcileVehicleOperationSupplierPayment = async ({
   next: VehicleOperationSupplierPaymentState | null;
 }) => {
   if (!previous && !next) return;
-  const supplierIds = [previous?.supplierId, next?.supplierId].filter(
-    (value): value is string => Boolean(value),
+  const supplierIds = [previous?.supplierId, next?.supplierId].filter((value): value is string =>
+    Boolean(value),
   );
   await lockSuppliers(tx, supplierIds);
 
@@ -678,7 +774,8 @@ export const reconcileVehicleOperationSupplierPayment = async ({
   for (const state of [previous, next]) {
     if (!state) continue;
     const current = affectedBySupplier.get(state.supplierId);
-    if (!current || state.transactionAt < current) affectedBySupplier.set(state.supplierId, state.transactionAt);
+    if (!current || state.transactionAt < current)
+      affectedBySupplier.set(state.supplierId, state.transactionAt);
   }
   const baselines: LedgerBaseline[] = [];
   for (const [supplierId, affectedAt] of affectedBySupplier) {
@@ -696,7 +793,10 @@ export const reconcileVehicleOperationSupplierPayment = async ({
     throw new HttpError(409, "Operation supplier baglantisi ile ledger hareketi uyusmuyor");
   }
   if (active) {
-    await tx.supplierTransaction.update({ where: { id: active.id }, data: { voidedAt: new Date() } });
+    await tx.supplierTransaction.update({
+      where: { id: active.id },
+      data: { voidedAt: new Date() },
+    });
   }
 
   if (next) {

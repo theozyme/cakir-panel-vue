@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
   getSummary,
+  getExport,
   getSuppliers,
   getTransactions,
   getTrend,
@@ -15,6 +16,7 @@ export const supplierRouter = Router();
 
 supplierRouter.get("/summary", getSummary);
 supplierRouter.get("/trend", getTrend);
+supplierRouter.get("/export", getExport);
 supplierRouter.get("/", getSuppliers);
 supplierRouter.post("/", postSupplier);
 supplierRouter.patch("/:supplierId/status", patchSupplierStatus);

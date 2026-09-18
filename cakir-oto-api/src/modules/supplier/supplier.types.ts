@@ -1,7 +1,10 @@
 import type { Prisma } from "../../../generated/prisma/client.js";
 
 import type { BusinessTransaction } from "../../lib/transaction.js";
-import type { PaymentSnapshot, serializePaymentSnapshot } from "../vehicle-operation/payment-conversion.js";
+import type {
+  PaymentSnapshot,
+  serializePaymentSnapshot,
+} from "../vehicle-operation/payment-conversion.js";
 
 export type SupplierCurrency = "TRY" | "USD";
 export type SupplierPeriod = "day" | "month" | "year";
@@ -64,6 +67,34 @@ export type SupplierTrendItemDto = {
   label: string;
   TRY: TrendCurrencyValues;
   USD: TrendCurrencyValues;
+};
+
+export type SupplierExportTotalsDto = Record<
+  SupplierCurrency,
+  { debtIncrease: string; payments: string }
+>;
+
+export type SupplierExportTransactionDto = {
+  id: string;
+  supplierName: string;
+  supplierIsActive: boolean;
+  transactionAt: string;
+  type: "DEBT_INCREASE" | "PAYMENT";
+  amount: string;
+  currency: SupplierCurrency;
+  balanceAfter: string | null;
+  note: string | null;
+  sourceType: SupplierTransactionSourceType;
+};
+
+export type SupplierExportDto = {
+  generatedAt: string;
+  overall: SupplierExportTotalsDto;
+  years: Array<{
+    year: number;
+    totals: SupplierExportTotalsDto;
+    transactions: SupplierExportTransactionDto[];
+  }>;
 };
 
 export type ManualSupplierTransactionInput = {
