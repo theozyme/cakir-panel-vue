@@ -11,6 +11,7 @@ import {
   listSupplierTransactions,
   parseManualSupplierTransaction,
   parseSupplierPeriodFilter,
+  undoManualSupplierTransaction,
 } from "./supplier.service.js";
 
 export const getExport = async (_req: Request, res: Response, next: NextFunction) => {
@@ -108,6 +109,18 @@ export const postDebt = async (req: Request, res: Response, next: NextFunction) 
           parseManualSupplierTransaction(req.body),
         ),
       );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const undoTransaction = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rawTransactionId = req.params.transactionId;
+    const transactionId = Array.isArray(rawTransactionId)
+      ? (rawTransactionId[0] ?? "")
+      : (rawTransactionId ?? "");
+    res.json(await undoManualSupplierTransaction(supplierIdFrom(req), transactionId));
   } catch (error) {
     next(error);
   }

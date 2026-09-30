@@ -610,62 +610,49 @@ const lockSupplier = async (tx: SupplierPaymentInput["tx"], supplierId: string) 
   return supplier;
 };
 
-const latestLedgerTransaction = async (tx: SupplierPaymentInput["tx"], supplierId: string) => {
-  const latest = await tx.supplierTransaction.findFirst({
-    where: { supplierId, voidedAt: null },
-    orderBy: [{ transactionAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-    select: { transactionAt: true, balanceAfter: true },
-  });
-  if (latest && latest.balanceAfter === null) {
-    throw new HttpError(409, "Supplier son hareketinin balanceAfter degeri eksik");
-  }
-  return latest;
-};
-
 export const createManualSupplierTransaction = async (
   supplierId: string,
   type: "PAYMENT" | "DEBT_INCREASE",
   input: ManualSupplierTransactionInput,
-): Promise<SupplierTransactionDto> =>
-  withSerializableTransaction(async (tx) => {
+  transaction?: SupplierPaymentInput["tx"],
+): Promise<SupplierTransactionDto> => {
+  const create = async (tx: SupplierPaymentInput["tx"]) => {
     const supplier = await lockSupplier(tx, supplierId);
-    const latest = await latestLedgerTransaction(tx, supplierId);
     const transactionAt = input.transactionAt ?? new Date();
-    if (latest && transactionAt.getTime() < latest.transactionAt.getTime()) {
-      throw new HttpError(409, "Islem tarihi supplier son hareketinden eski olamaz");
-    }
-
-    const previousBalance = latest?.balanceAfter ?? zero();
-    const balanceAfter =
-      type === "PAYMENT" ? previousBalance.minus(input.amount) : previousBalance.plus(input.amount);
+    const baseline = await resolveLedgerBaseline(tx, supplierId, transactionAt);
     const row = await tx.supplierTransaction.create({
       data: {
         supplierId,
         type,
         amount: input.amount,
         currency: supplier.currency,
-        balanceAfter,
+        balanceAfter: zero(),
         note: input.note,
         transactionAt,
         sourceType: "MANUAL",
         sourceId: null,
       },
     });
+    await recalculateLedgerFrom(tx, baseline);
+    const recalculated = await tx.supplierTransaction.findUniqueOrThrow({ where: { id: row.id } });
 
     return {
-      id: row.id,
-      ...serializePaymentSnapshot(row),
-      transactionAt: row.transactionAt.toISOString(),
-      type: row.type,
-      amount: moneyToString(row.amount),
-      currency: asCurrency(row.currency),
-      balanceAfter: row.balanceAfter ? moneyToString(row.balanceAfter) : null,
-      note: row.note,
-      sourceType: row.sourceType,
-      sourceId: row.sourceId,
-      voidedAt: row.voidedAt?.toISOString() ?? null,
+      id: recalculated.id,
+      ...serializePaymentSnapshot(recalculated),
+      transactionAt: recalculated.transactionAt.toISOString(),
+      type: recalculated.type,
+      amount: moneyToString(recalculated.amount),
+      currency: asCurrency(recalculated.currency),
+      balanceAfter: recalculated.balanceAfter ? moneyToString(recalculated.balanceAfter) : null,
+      note: recalculated.note,
+      sourceType: recalculated.sourceType,
+      sourceId: recalculated.sourceId,
+      voidedAt: recalculated.voidedAt?.toISOString() ?? null,
     };
-  });
+  };
+
+  return transaction ? create(transaction) : withSerializableTransaction(create);
+};
 
 export const createVehicleOperationSupplierPayment = async (input: SupplierPaymentInput) => {
   const { tx, operationId, ...next } = input;
@@ -751,6 +738,46 @@ const recalculateLedgerFrom = async (tx: SupplierPaymentInput["tx"], baseline: L
       });
     }
   }
+};
+
+export const undoManualSupplierTransaction = async (
+  supplierId: string,
+  transactionId: string,
+  transaction?: SupplierPaymentInput["tx"],
+): Promise<{ id: string; voidedAt: string }> => {
+  const undo = async (tx: SupplierPaymentInput["tx"]) => {
+    await lockSuppliers(tx, [supplierId]);
+    const row = await tx.supplierTransaction.findFirst({
+      where: { id: transactionId, supplierId },
+      select: {
+        id: true,
+        sourceType: true,
+        type: true,
+        voidedAt: true,
+        transactionAt: true,
+      },
+    });
+    if (!row) throw new HttpError(404, "Supplier hareketi bulunamadi");
+    if (row.voidedAt) throw new HttpError(409, "Supplier hareketi zaten geri alinmis");
+    if (row.sourceType !== "MANUAL") {
+      throw new HttpError(409, "Yalnizca manuel supplier hareketleri bu ekrandan geri alinabilir");
+    }
+    if (row.type !== "DEBT_INCREASE" && row.type !== "PAYMENT") {
+      throw new HttpError(409, "Bu supplier hareketi geri alinamaz");
+    }
+
+    const baseline = await resolveLedgerBaseline(tx, supplierId, row.transactionAt);
+    const voidedAt = new Date();
+    await tx.supplierTransaction.update({
+      where: { id: row.id },
+      data: { voidedAt },
+    });
+    await recalculateLedgerFrom(tx, baseline);
+
+    return { id: row.id, voidedAt: voidedAt.toISOString() };
+  };
+
+  return transaction ? undo(transaction) : withSerializableTransaction(undo);
 };
 
 export const reconcileVehicleOperationSupplierPayment = async ({

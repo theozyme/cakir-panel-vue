@@ -23,6 +23,7 @@ import { Route as AdminMigrationRouteImport } from './routes/admin.migration'
 import { Route as AraclarIndexRouteImport } from './routes/araclar.index'
 import { Route as AraclarVehicleIdRouteImport } from './routes/araclar.$vehicleId'
 import { Route as AraclarYeniRouteImport } from './routes/araclar.yeni'
+import { Route as MailOrderFirmaDetayliRaporRouteImport } from './routes/mail-order_.firma-detayli-rapor'
 import { Route as SesSistemiIndexRouteImport } from './routes/ses-sistemi.index'
 import { Route as SesSistemiTeklifGecmisiRouteImport } from './routes/ses-sistemi.teklif-gecmisi'
 import { Route as SesSistemiTeklifVerRouteImport } from './routes/ses-sistemi.teklif-ver'
@@ -100,6 +101,12 @@ const AraclarYeniRoute = AraclarYeniRouteImport.update({
   path: '/yeni',
   getParentRoute: () => AraclarRoute,
 } as any)
+const MailOrderFirmaDetayliRaporRoute =
+  MailOrderFirmaDetayliRaporRouteImport.update({
+    id: '/mail-order_/firma-detayli-rapor',
+    path: '/mail-order/firma-detayli-rapor',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const SesSistemiIndexRoute = SesSistemiIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -145,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/admin/migration': typeof AdminMigrationRoute
   '/araclar/$vehicleId': typeof AraclarVehicleIdRoute
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/mail-order/firma-detayli-rapor': typeof MailOrderFirmaDetayliRaporRoute
   '/ses-sistemi/teklif-gecmisi': typeof SesSistemiTeklifGecmisiRoute
   '/ses-sistemi/teklif-ver': typeof SesSistemiTeklifVerRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
@@ -164,6 +172,7 @@ export interface FileRoutesByTo {
   '/admin/migration': typeof AdminMigrationRoute
   '/araclar/$vehicleId': typeof AraclarVehicleIdRoute
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/mail-order/firma-detayli-rapor': typeof MailOrderFirmaDetayliRaporRoute
   '/ses-sistemi/teklif-gecmisi': typeof SesSistemiTeklifGecmisiRoute
   '/ses-sistemi/teklif-ver': typeof SesSistemiTeklifVerRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
@@ -187,6 +196,7 @@ export interface FileRoutesById {
   '/admin/migration': typeof AdminMigrationRoute
   '/araclar/$vehicleId': typeof AraclarVehicleIdRoute
   '/araclar/yeni': typeof AraclarYeniRoute
+  '/mail-order_/firma-detayli-rapor': typeof MailOrderFirmaDetayliRaporRoute
   '/ses-sistemi/teklif-gecmisi': typeof SesSistemiTeklifGecmisiRoute
   '/ses-sistemi/teklif-ver': typeof SesSistemiTeklifVerRoute
   '/stok/siparis-ver': typeof StokSiparisVerRoute
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/admin/migration'
     | '/araclar/$vehicleId'
     | '/araclar/yeni'
+    | '/mail-order/firma-detayli-rapor'
     | '/ses-sistemi/teklif-gecmisi'
     | '/ses-sistemi/teklif-ver'
     | '/stok/siparis-ver'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/admin/migration'
     | '/araclar/$vehicleId'
     | '/araclar/yeni'
+    | '/mail-order/firma-detayli-rapor'
     | '/ses-sistemi/teklif-gecmisi'
     | '/ses-sistemi/teklif-ver'
     | '/stok/siparis-ver'
@@ -252,6 +264,7 @@ export interface FileRouteTypes {
     | '/admin/migration'
     | '/araclar/$vehicleId'
     | '/araclar/yeni'
+    | '/mail-order_/firma-detayli-rapor'
     | '/ses-sistemi/teklif-gecmisi'
     | '/ses-sistemi/teklif-ver'
     | '/stok/siparis-ver'
@@ -273,6 +286,7 @@ export interface RootRouteChildren {
   SesSistemiRoute: typeof SesSistemiRouteWithChildren
   StokRoute: typeof StokRouteWithChildren
   AdminMigrationRoute: typeof AdminMigrationRoute
+  MailOrderFirmaDetayliRaporRoute: typeof MailOrderFirmaDetayliRaporRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -374,6 +388,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/araclar/yeni'
       preLoaderRoute: typeof AraclarYeniRouteImport
       parentRoute: typeof AraclarRoute
+    }
+    '/mail-order_/firma-detayli-rapor': {
+      id: '/mail-order_/firma-detayli-rapor'
+      path: '/mail-order/firma-detayli-rapor'
+      fullPath: '/mail-order/firma-detayli-rapor'
+      preLoaderRoute: typeof MailOrderFirmaDetayliRaporRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/ses-sistemi/': {
       id: '/ses-sistemi/'
@@ -477,6 +498,7 @@ const rootRouteChildren: RootRouteChildren = {
   SesSistemiRoute: SesSistemiRouteWithChildren,
   StokRoute: StokRouteWithChildren,
   AdminMigrationRoute: AdminMigrationRoute,
+  MailOrderFirmaDetayliRaporRoute: MailOrderFirmaDetayliRaporRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

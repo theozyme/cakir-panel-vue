@@ -10,6 +10,7 @@ import {
   postPayment,
   postSupplier,
   patchSupplierStatus,
+  undoTransaction,
 } from "./supplier.controller.js";
 
 export const supplierRouter = Router();
@@ -21,5 +22,6 @@ supplierRouter.get("/", getSuppliers);
 supplierRouter.post("/", postSupplier);
 supplierRouter.patch("/:supplierId/status", patchSupplierStatus);
 supplierRouter.get("/:supplierId/transactions", getTransactions);
+supplierRouter.patch("/:supplierId/transactions/:transactionId/undo", undoTransaction);
 supplierRouter.post("/:supplierId/payments", postPayment);
 supplierRouter.post("/:supplierId/debts", postDebt);

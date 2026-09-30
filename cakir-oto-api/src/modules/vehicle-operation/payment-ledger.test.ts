@@ -6,8 +6,12 @@ import { convertSupplierPayment, emptyPaymentSnapshot } from "./payment-conversi
 
 // Unit tests use in-memory transaction doubles, never the configured live database.
 process.env.DATABASE_URL = "postgresql://unit_test:unit_test@127.0.0.1:1/unit_test";
-const { createVehicleOperationSupplierPayment, reconcileVehicleOperationSupplierPayment } =
-  await import("../supplier/supplier.service.js");
+const {
+  createManualSupplierTransaction,
+  createVehicleOperationSupplierPayment,
+  reconcileVehicleOperationSupplierPayment,
+  undoManualSupplierTransaction,
+} = await import("../supplier/supplier.service.js");
 const { supplierStateKey, preparePaymentRate } = await import("./payment-state.js");
 const { getPrisma } = await import("../../lib/prisma.js");
 
@@ -20,8 +24,11 @@ function ledger() {
       supplierId: "supplier",
       type: "DEBT_INCREASE",
       amount: decimal(6000),
+      currency: "USD",
       balanceAfter: decimal(6000),
       transactionAt: new Date("2026-09-10T00:00:00Z"),
+      sourceType: "MANUAL",
+      sourceId: null,
       voidedAt: null,
     },
     {
@@ -48,6 +55,7 @@ function ledger() {
   const filtered = (where: any) =>
     rows.filter(
       (r) =>
+        (!where.id || r.id === where.id) &&
         (!where.supplierId || r.supplierId === where.supplierId) &&
         (!where.sourceId || r.sourceId === where.sourceId) &&
         (where.voidedAt !== null || r.voidedAt === null) &&
@@ -66,6 +74,11 @@ function ledger() {
         filtered(where).sort((a, b) => a.transactionAt - b.transactionAt),
       findFirstOrThrow: async ({ where }: any) => {
         const row = filtered(where)[0];
+        if (!row) throw new Error("Missing ledger row");
+        return row;
+      },
+      findUniqueOrThrow: async ({ where }: any) => {
+        const row = rows.find((candidate) => candidate.id === where.id);
         if (!row) throw new Error("Missing ledger row");
         return row;
       },
@@ -201,4 +214,38 @@ test("new backdated payment preserves its date and recalculates later movements"
   assert.equal(created.amount.toFixed(2), "350.00");
   assert.equal(rows.find((r) => r.id === "later").balanceAfter.toFixed(2), "5550.00");
   await assert.rejects(() => createVehicleOperationSupplierPayment(input), /zaten mevcut/);
+});
+
+test("manual backdated debt recalculates every later balance", async () => {
+  const { tx, rows } = ledger();
+  const transactionAt = new Date("2026-09-10T12:00:00Z");
+  const created = await createManualSupplierTransaction(
+    "supplier",
+    "DEBT_INCREASE",
+    {
+      amount: decimal(50),
+      note: "Eksik fatura",
+      transactionAt,
+    },
+    tx,
+  );
+
+  assert.equal(created.transactionAt, transactionAt.toISOString());
+  assert.equal(created.balanceAfter, "6050.00");
+  assert.equal(rows.find((r) => r.id === "old-payment").balanceAfter.toFixed(2), "-7950.00");
+  assert.equal(rows.find((r) => r.id === "later").balanceAfter.toFixed(2), "-8050.00");
+});
+
+test("undoing a manual movement voids it and recalculates later balances", async () => {
+  const { tx, rows } = ledger();
+  const result = await undoManualSupplierTransaction("supplier", "debt", tx);
+
+  assert.equal(result.id, "debt");
+  assert.ok(rows.find((r) => r.id === "debt").voidedAt);
+  assert.equal(rows.find((r) => r.id === "old-payment").balanceAfter.toFixed(2), "-14000.00");
+  assert.equal(rows.find((r) => r.id === "later").balanceAfter.toFixed(2), "-14100.00");
+  await assert.rejects(
+    () => undoManualSupplierTransaction("supplier", "old-payment", tx),
+    /Yalnizca manuel/,
+  );
 });

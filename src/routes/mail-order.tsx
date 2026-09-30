@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
 import { useEffect, useMemo, useState } from "react";
-import { FileSpreadsheet, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Building2, FileSpreadsheet, Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -500,11 +500,17 @@ function MailOrder() {
           </label>
         )}
         <div className="pb-2 text-xs text-muted-foreground">Saat dilimi: Europe/Istanbul</div>
+        <Link
+          to="/mail-order/firma-detayli-rapor"
+          className="ml-auto inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:opacity-90"
+        >
+          <Building2 className="h-4 w-4" /> Firma Detaylı Rapor
+        </Link>
         <button
           type="button"
           disabled={isExporting}
           onClick={() => void exportAllYears()}
-          className="ml-auto inline-flex h-10 items-center gap-2 rounded-lg bg-success px-4 text-sm font-bold text-success-foreground hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+          className="inline-flex h-10 items-center gap-2 rounded-lg bg-success px-4 text-sm font-bold text-success-foreground hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
           title="Tüm firmaların tüm yıllardaki mal girişi ve ödeme hareketlerini Excel'e aktar"
         >
           <FileSpreadsheet className="h-4 w-4" />
