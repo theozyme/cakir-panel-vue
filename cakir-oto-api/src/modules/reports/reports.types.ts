@@ -1,3 +1,5 @@
+import type { UsdExchangeRateDto } from "../exchange-rate/exchange-rate.types.js";
+
 export type ReportPeriod = "day" | "month" | "year";
 export type ReportCurrency = "TRY" | "USD";
 export type DashboardPaymentPeriod = "today" | "month" | "mtd" | "30d" | "90d" | "1y";
@@ -55,6 +57,7 @@ export type ReportTrendItemDto = {
 
 export type ReportsOverviewDto = {
   period: ReportPeriodDto;
+  exchangeRate: UsdExchangeRateDto;
   revenue: CurrencyTotals;
   expenses: {
     total: CurrencyTotals;
@@ -64,6 +67,7 @@ export type ReportsOverviewDto = {
     };
   };
   net: CurrencyTotals;
+  cumulativeNet: CurrencyTotals;
   totalOperations: number;
   totalVehicles: number;
   operationTypes: ReportDistributionItemDto[];

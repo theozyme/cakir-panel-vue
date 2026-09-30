@@ -1,4 +1,4 @@
-import type { Currency } from "./business";
+import type { Currency, UsdExchangeRate } from "./business";
 
 export type ReportPeriod = "day" | "month" | "year";
 export type DashboardPaymentPeriod = "today" | "month" | "mtd" | "30d" | "90d" | "1y";
@@ -43,6 +43,7 @@ export type ReportsOverview = {
     end: string;
     timeZone: "Europe/Istanbul";
   };
+  exchangeRate: UsdExchangeRate;
   revenue: ReportCurrencyTotals;
   expenses: {
     total: ReportCurrencyTotals;
@@ -52,6 +53,7 @@ export type ReportsOverview = {
     };
   };
   net: ReportCurrencyTotals;
+  cumulativeNet: ReportCurrencyTotals;
   totalOperations: number;
   totalVehicles: number;
   operationTypes: ReportDistributionItem[];

@@ -4,9 +4,11 @@ import { HttpError } from "../../lib/http-error.js";
 import { moneyToString } from "../../lib/money.js";
 import { getPrisma } from "../../lib/prisma.js";
 import { asRecord, oneOf } from "../../lib/validation.js";
+import { getUsdExchangeRate } from "../exchange-rate/exchange-rate.service.js";
 import {
   getSpecialPaymentDailyTotals,
   getSpecialPaymentSummary,
+  getSpecialPaymentTotalsBefore,
   parseSpecialPaymentPeriodFilter,
 } from "../special-payment/special-payment.service.js";
 import type { SpecialPaymentTotals } from "../special-payment/special-payment.types.js";
@@ -264,6 +266,14 @@ const serializeTotals = (totals: DecimalTotals): CurrencyTotals => ({
   USD: moneyToString(totals.USD),
 });
 
+const convertTotalsToTry = (
+  totals: DecimalTotals,
+  usdToTryRate: Prisma.Decimal,
+): DecimalTotals => ({
+  TRY: totals.TRY.plus(totals.USD.mul(usdToTryRate)),
+  USD: new Prisma.Decimal(0),
+});
+
 const percentage = (amount: Prisma.Decimal, total: Prisma.Decimal): string =>
   total.isZero() ? "0.00" : amount.div(total).mul(100).toFixed(2);
 
@@ -275,11 +285,26 @@ const supplierReportCurrency = Prisma.sql`CASE WHEN "source_type" = 'VEHICLE_OPE
 const supplierReportAmount = Prisma.sql`CASE WHEN "source_type" = 'VEHICLE_OPERATION' AND "source_currency" = 'TRY' AND "source_amount" IS NOT NULL THEN "source_amount" ELSE "amount" END`;
 
 const getMailOrderReportTotals = async (filter: ReportPeriodFilter) => {
-  const rows = await getPrisma().$queryRaw<Array<{ currency: string; amount: Prisma.Decimal }>>(Prisma.sql`
+  const rows = await getPrisma().$queryRaw<
+    Array<{ currency: string; amount: Prisma.Decimal }>
+  >(Prisma.sql`
     SELECT ${supplierReportCurrency} AS "currency", SUM(${supplierReportAmount}) AS "amount"
     FROM "supplier_transactions"
     WHERE "transaction_at" >= CAST(${utcTimestampText(filter.start)} AS timestamp)
       AND "transaction_at" < CAST(${utcTimestampText(filter.end)} AS timestamp)
+      AND "type" = 'PAYMENT' AND "voided_at" IS NULL
+    GROUP BY 1
+  `);
+  return rows.map((row) => ({ currency: row.currency, _sum: { amount: row.amount } }));
+};
+
+const getMailOrderReportTotalsBefore = async (end: Date) => {
+  const rows = await getPrisma().$queryRaw<
+    Array<{ currency: string; amount: Prisma.Decimal }>
+  >(Prisma.sql`
+    SELECT ${supplierReportCurrency} AS "currency", SUM(${supplierReportAmount}) AS "amount"
+    FROM "supplier_transactions"
+    WHERE "transaction_at" < CAST(${utcTimestampText(end)} AS timestamp)
       AND "type" = 'PAYMENT' AND "voided_at" IS NULL
     GROUP BY 1
   `);
@@ -402,6 +427,7 @@ const buildTrend = (
   revenueRows: TrendAggregateRow[],
   mailOrderRows: TrendAggregateRow[],
   specialPaymentRows: Array<{ date: string; total: string }>,
+  usdToTryRate: Prisma.Decimal,
 ): ReportTrendItemDto[] => {
   const revenueByBucket = new Map<string, DecimalTotals>();
   const mailOrderByBucket = new Map<string, DecimalTotals>();
@@ -422,18 +448,20 @@ const buildTrend = (
     const revenue = revenueByBucket.get(bucket.key) ?? zeroTotals();
     const mailOrder = mailOrderByBucket.get(bucket.key) ?? zeroTotals();
     const specialPayments = specialPaymentsByBucket.get(bucket.key) ?? zeroTotals();
-    const expenses: DecimalTotals = {
+    const nativeExpenses: DecimalTotals = {
       TRY: mailOrder.TRY.plus(specialPayments.TRY),
       USD: mailOrder.USD.plus(specialPayments.USD),
     };
+    const convertedRevenue = convertTotalsToTry(revenue, usdToTryRate);
+    const expenses = convertTotalsToTry(nativeExpenses, usdToTryRate);
     const net: DecimalTotals = {
-      TRY: revenue.TRY.minus(expenses.TRY),
-      USD: revenue.USD.minus(expenses.USD),
+      TRY: convertedRevenue.TRY.minus(expenses.TRY),
+      USD: new Prisma.Decimal(0),
     };
     return {
       bucketStart: bucket.bucketStart,
       label: bucket.label,
-      revenue: serializeTotals(revenue),
+      revenue: serializeTotals(convertedRevenue),
       expenses: serializeTotals(expenses),
       net: serializeTotals(net),
     };
@@ -544,17 +572,22 @@ const operationTypeDefinitions = (
 const serializeDistribution = (
   items: DistributionAccumulator[],
   revenue: DecimalTotals,
+  usdToTryRate?: Prisma.Decimal,
 ): ReportDistributionItemDto[] =>
-  items.map((item) => ({
-    key: item.key,
-    label: item.label,
-    count: item.count,
-    amounts: serializeTotals(item.amounts),
-    percentages: {
-      TRY: percentage(item.amounts.TRY, revenue.TRY),
-      USD: percentage(item.amounts.USD, revenue.USD),
-    },
-  }));
+  items.map((item) => {
+    const amounts = usdToTryRate ? convertTotalsToTry(item.amounts, usdToTryRate) : item.amounts;
+    const totalRevenue = usdToTryRate ? convertTotalsToTry(revenue, usdToTryRate) : revenue;
+    return {
+      key: item.key,
+      label: item.label,
+      count: item.count,
+      amounts: serializeTotals(amounts),
+      percentages: {
+        TRY: percentage(amounts.TRY, totalRevenue.TRY),
+        USD: percentage(amounts.USD, totalRevenue.USD),
+      },
+    };
+  });
 
 const buildDistribution = <
   T extends { currency: string; _sum: { price: Prisma.Decimal | null }; _count: { _all: number } },
@@ -563,6 +596,7 @@ const buildDistribution = <
   definitions: DistributionDefinition[],
   keyFromRow: (row: T) => string,
   revenue: DecimalTotals,
+  usdToTryRate?: Prisma.Decimal,
 ): ReportDistributionItemDto[] => {
   const items = definitions.map<DistributionAccumulator>((definition) => ({
     ...definition,
@@ -580,7 +614,7 @@ const buildDistribution = <
     item.amounts[currency] = item.amounts[currency].plus(decimalValue(row._sum.price));
   }
 
-  return serializeDistribution(items, revenue);
+  return serializeDistribution(items, revenue, usdToTryRate);
 };
 
 const dashboardWeekdayFormatter = new Intl.DateTimeFormat("tr-TR", {
@@ -679,6 +713,10 @@ export const getReportsOverview = async (
     specialSummary,
     specialDailyTotals,
     trendRows,
+    exchangeRate,
+    cumulativeRevenueRows,
+    cumulativeMailOrderRows,
+    cumulativeSpecialPaymentTotals,
   ] = await Promise.all([
     prisma.vehicleOperation.groupBy({
       by: ["currency"],
@@ -703,7 +741,17 @@ export const getReportsOverview = async (
     getSpecialPaymentSummary(specialPaymentFilter),
     getSpecialPaymentDailyTotals(specialPaymentFilter),
     getTrendAggregateRows(filter),
+    getUsdExchangeRate(),
+    prisma.vehicleOperation.groupBy({
+      by: ["currency"],
+      where: { operationAt: { lt: filter.end }, deletedAt: null },
+      _sum: { price: true },
+    }),
+    getMailOrderReportTotalsBefore(filter.end),
+    getSpecialPaymentTotalsBefore(filter.end),
   ]);
+
+  const usdToTryRate = new Prisma.Decimal(exchangeRate.rate);
 
   const revenue = zeroTotals();
   revenueRows.forEach((row) => {
@@ -718,13 +766,41 @@ export const getReportsOverview = async (
   });
 
   const specialPayments = specialPaymentTotals(specialSummary.totals);
+  const convertedRevenue = convertTotalsToTry(revenue, usdToTryRate);
+  const convertedMailOrder = convertTotalsToTry(mailOrder, usdToTryRate);
+  const convertedSpecialPayments = convertTotalsToTry(specialPayments, usdToTryRate);
   const expenses: DecimalTotals = {
-    TRY: mailOrder.TRY.plus(specialPayments.TRY),
-    USD: mailOrder.USD.plus(specialPayments.USD),
+    TRY: convertedMailOrder.TRY.plus(convertedSpecialPayments.TRY),
+    USD: new Prisma.Decimal(0),
   };
   const net: DecimalTotals = {
-    TRY: revenue.TRY.minus(expenses.TRY),
-    USD: revenue.USD.minus(expenses.USD),
+    TRY: convertedRevenue.TRY.minus(expenses.TRY),
+    USD: new Prisma.Decimal(0),
+  };
+
+  const cumulativeRevenue = zeroTotals();
+  cumulativeRevenueRows.forEach((row) => {
+    const currency = asCurrency(row.currency);
+    cumulativeRevenue[currency] = cumulativeRevenue[currency].plus(decimalValue(row._sum.price));
+  });
+  const cumulativeMailOrder = zeroTotals();
+  cumulativeMailOrderRows.forEach((row) => {
+    const currency = asCurrency(row.currency);
+    cumulativeMailOrder[currency] = cumulativeMailOrder[currency].plus(
+      decimalValue(row._sum.amount),
+    );
+  });
+  const convertedCumulativeRevenue = convertTotalsToTry(cumulativeRevenue, usdToTryRate);
+  const convertedCumulativeMailOrder = convertTotalsToTry(cumulativeMailOrder, usdToTryRate);
+  const convertedCumulativeSpecialPayments = convertTotalsToTry(
+    specialPaymentTotals(cumulativeSpecialPaymentTotals),
+    usdToTryRate,
+  );
+  const cumulativeNet: DecimalTotals = {
+    TRY: convertedCumulativeRevenue.TRY.minus(
+      convertedCumulativeMailOrder.TRY.plus(convertedCumulativeSpecialPayments.TRY),
+    ),
+    USD: new Prisma.Decimal(0),
   };
 
   const operationTypes = buildDistribution(
@@ -732,6 +808,7 @@ export const getReportsOverview = async (
     operationTypeDefinitions(operationTypeRows),
     (row) => row.operationType ?? historicalOperationDefinition(row.description).key,
     revenue,
+    usdToTryRate,
   );
 
   const paymentMethods = buildDistribution(
@@ -739,6 +816,7 @@ export const getReportsOverview = async (
     paymentMethodDefinitions,
     (row) => row.paymentMethod,
     revenue,
+    usdToTryRate,
   );
 
   const expenseBreakdownBase: Array<Omit<ExpenseBreakdownItemDto, "percentages">> = [
@@ -785,13 +863,20 @@ export const getReportsOverview = async (
       amounts: { TRY: specialSummary.totals.meal, USD: "0.00" },
     },
   ];
-  const expenseBreakdown: ExpenseBreakdownItemDto[] = expenseBreakdownBase.map((item) => ({
-    ...item,
-    percentages: {
-      TRY: percentage(decimalValue(item.amounts.TRY), expenses.TRY),
-      USD: percentage(decimalValue(item.amounts.USD), expenses.USD),
-    },
-  }));
+  const expenseBreakdown: ExpenseBreakdownItemDto[] = expenseBreakdownBase.map((item) => {
+    const amounts = convertTotalsToTry(
+      { TRY: decimalValue(item.amounts.TRY), USD: decimalValue(item.amounts.USD) },
+      usdToTryRate,
+    );
+    return {
+      ...item,
+      amounts: serializeTotals(amounts),
+      percentages: {
+        TRY: percentage(amounts.TRY, expenses.TRY),
+        USD: "0.00",
+      },
+    };
+  });
 
   return {
     period: {
@@ -801,20 +886,28 @@ export const getReportsOverview = async (
       end: filter.end.toISOString(),
       timeZone,
     },
-    revenue: serializeTotals(revenue),
+    exchangeRate,
+    revenue: serializeTotals(convertedRevenue),
     expenses: {
       total: serializeTotals(expenses),
       sources: {
-        mailOrder: serializeTotals(mailOrder),
-        specialPayments: serializeTotals(specialPayments),
+        mailOrder: serializeTotals(convertedMailOrder),
+        specialPayments: serializeTotals(convertedSpecialPayments),
       },
     },
     net: serializeTotals(net),
+    cumulativeNet: serializeTotals(cumulativeNet),
     totalOperations: operationCount,
     totalVehicles: vehicleGroups.length,
     operationTypes,
     paymentMethods,
     expenseBreakdown,
-    trend: buildTrend(filter, trendRows.revenue, trendRows.mailOrder, specialDailyTotals),
+    trend: buildTrend(
+      filter,
+      trendRows.revenue,
+      trendRows.mailOrder,
+      specialDailyTotals,
+      usdToTryRate,
+    ),
   };
 };

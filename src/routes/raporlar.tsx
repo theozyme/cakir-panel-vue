@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
   TrendingDown,
@@ -12,6 +12,8 @@ import {
   Layers,
   RefreshCw,
   Inbox,
+  Info,
+  History,
 } from "lucide-react";
 import {
   Area,
@@ -153,35 +155,6 @@ function ReportHeading({
   );
 }
 
-function CurrencySelector({
-  currency,
-  hasUsd,
-  onChange,
-}: {
-  currency: Currency;
-  hasUsd: boolean;
-  onChange: (currency: Currency) => void;
-}) {
-  return (
-    <div className="inline-flex rounded-lg border border-input bg-card p-1">
-      {(["TRY", "USD"] as const).map((value) => (
-        <Button
-          key={value}
-          type="button"
-          size="sm"
-          variant={currency === value ? "default" : "ghost"}
-          disabled={value === "USD" && !hasUsd}
-          aria-pressed={currency === value}
-          title={value === "USD" && !hasUsd ? "Seçili dönemde USD tutarı bulunmuyor" : undefined}
-          onClick={() => onChange(value)}
-        >
-          {value}
-        </Button>
-      ))}
-    </div>
-  );
-}
-
 function DistributionList({
   items,
   currency,
@@ -276,7 +249,7 @@ function ExpenseBreakdown({
 function Raporlar() {
   const [period, setPeriod] = useState<ReportPeriod>("month");
   const [date, setDate] = useState(todayInIstanbul);
-  const [currency, setCurrency] = useState<Currency>("TRY");
+  const currency: Currency = "TRY";
   const queryString = useMemo(
     () => new URLSearchParams({ period, date }).toString(),
     [date, period],
@@ -286,16 +259,6 @@ function Raporlar() {
     queryFn: () => apiRequest<ReportsOverview>(`/api/reports/overview?${queryString}`),
   });
   const overview = overviewQuery.data;
-  const hasUsd = Boolean(
-    overview &&
-    [overview.revenue.USD, overview.expenses.total.USD, overview.net.USD].some(
-      (value) => !isZeroMoney(value),
-    ),
-  );
-
-  useEffect(() => {
-    if (overview && !hasUsd) setCurrency("TRY");
-  }, [hasUsd, overview]);
 
   const dateInput =
     period === "day" ? (
@@ -341,7 +304,6 @@ function Raporlar() {
     ...(period !== "year" ? { month: "long" as const } : {}),
     ...(period === "day" ? { day: "numeric" as const } : {}),
   }).format(new Date(`${date}T12:00:00`));
-  const otherCurrency: Currency = currency === "TRY" ? "USD" : "TRY";
 
   return (
     <AppLayout title="Raporlar">
@@ -399,29 +361,22 @@ function Raporlar() {
             {period === "day" ? "Bugün" : period === "month" ? "Bu ay" : "Bu yıl"}
           </Button>
         </div>
-        <div className="flex items-center gap-3">
-          {overviewQuery.isFetching && !overviewQuery.isPending && (
-            <span role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <RefreshCw className="h-3 w-3 animate-spin" />
-              Güncelleniyor…
-            </span>
-          )}
-          <div>
-            <div className="mb-1 text-xs font-medium text-muted-foreground">Para birimi</div>
-            <CurrencySelector currency={currency} hasUsd={hasUsd} onChange={setCurrency} />
-          </div>
-        </div>
+        {overviewQuery.isFetching && !overviewQuery.isPending && (
+          <span role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <RefreshCw className="h-3 w-3 animate-spin" />
+            Güncelleniyor…
+          </span>
+        )}
       </div>
       <p className="mb-4 text-[11px] text-muted-foreground">
-        Dönemler Türkiye saatine göre hesaplanır. Tutarlar seçili para birimindedir; işlem adetleri
-        tüm para birimlerini kapsar.
+        Dönemler Türkiye saatine göre hesaplanır. Tüm tutarlar TL olarak gösterilir.
       </p>
 
       {overviewQuery.isPending && (
         <div role="status" aria-label="Rapor verileri yükleniyor" className="space-y-4">
           <span className="sr-only">Rapor verileri yükleniyor…</span>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[1, 2, 3, 4].map((item) => (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {[1, 2, 3, 4, 5].map((item) => (
               <div
                 key={item}
                 className="h-36 animate-pulse rounded-xl border border-border bg-muted"
@@ -453,40 +408,53 @@ function Raporlar() {
 
       {overview && (
         <>
-          <section aria-label="Finansal özet" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <div>
+              <div className="font-semibold">Net kazanç nasıl hesaplanır?</div>
+              <p className="mt-1 leading-relaxed text-muted-foreground">
+                TL karşılığı toplam cirodan TL karşılığı toplam gider çıkarılır. USD tutarlı
+                kayıtlar, güncel TCMB döviz satış kuru ile TL'ye çevrilir: 1 USD ={" "}
+                {Number(overview.exchangeRate.rate).toLocaleString("tr-TR", {
+                  minimumFractionDigits: 4,
+                  maximumFractionDigits: 4,
+                })}{" "}
+                TL ({overview.exchangeRate.effectiveDate.split("-").reverse().join(".")}
+                {overview.exchangeRate.isStale ? " · son kayıtlı kur" : ""}). Kümüle net kazanç,
+                sistemdeki ilk kayıttan seçili dönemin sonuna kadar aynı yöntemle hesaplanır.
+              </p>
+            </div>
+          </div>
+          <section aria-label="Finansal özet" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <ReportMetric
               label="Ciro"
               value={money(overview.revenue[currency], currency)}
-              hint={
-                hasUsd
-                  ? `Diğer para birimi: ${money(overview.revenue[otherCurrency], otherCurrency)}`
-                  : "Seçili dönemin toplam cirosu"
-              }
+              hint="TL karşılığı toplam ciro"
               icon={<TrendingUp className="h-5 w-5" />}
               tone="success"
             />
             <ReportMetric
               label="Gider"
               value={money(overview.expenses.total[currency], currency)}
-              hint={
-                hasUsd
-                  ? `${money(overview.expenses.total[otherCurrency], otherCurrency)} · Mail Order + Özel Ödemeler`
-                  : "Mail Order + Özel Ödemeler"
-              }
+              hint="TL giderler + kurdan çevrilen USD giderler"
               icon={<TrendingDown className="h-5 w-5" />}
               tone="destructive"
             />
             <ReportMetric
               label="Net Kazanç"
               value={money(overview.net[currency], currency)}
-              hint={
-                hasUsd
-                  ? `Diğer para birimi: ${money(overview.net[otherCurrency], otherCurrency)}`
-                  : "Toplam ciro − toplam gider"
-              }
+              hint="TL karşılığı toplam ciro − toplam gider"
               featured
               icon={<Wallet className="h-5 w-5" />}
               tone={overview.net[currency].startsWith("-") ? "destructive" : "primary"}
+            />
+            <ReportMetric
+              label="Kümüle Net Kazanç"
+              value={money(overview.cumulativeNet[currency], currency)}
+              hint="İlk kayıttan seçili dönemin sonuna kadar"
+              featured
+              icon={<History className="h-5 w-5" />}
+              tone={overview.cumulativeNet[currency].startsWith("-") ? "destructive" : "success"}
             />
             <ReportMetric
               label="İşlem Sayısı"
@@ -501,7 +469,7 @@ function Raporlar() {
             <div className="min-w-0 rounded-xl border border-border bg-card p-4 md:p-5 xl:col-span-2">
               <ReportHeading
                 title="Finansal performans"
-                description={`${periodTitle} · Ciro, gider ve net kazancın dönem içindeki seyri · ${currency}`}
+                description={`${periodTitle} · Ciro, gider ve net kazancın dönem içindeki seyri · TL`}
                 icon={<ChartNoAxesCombined className="h-4 w-4" />}
               />
               <div className="h-80">
@@ -608,7 +576,7 @@ function Raporlar() {
             <div className="min-w-0 rounded-xl border border-border bg-card p-4 md:p-5">
               <ReportHeading
                 title="Gider Dağılımı"
-                description={`Gider kaynakları ve toplam içindeki payları · ${currency}`}
+                description="Gider kaynakları ve toplam içindeki payları · TL"
                 icon={<TrendingDown className="h-4 w-4" />}
               />
               <div className="mb-4 grid grid-cols-2 gap-2">
@@ -632,7 +600,7 @@ function Raporlar() {
             <div className="min-w-0 rounded-xl border border-border bg-card p-4 md:p-5">
               <ReportHeading
                 title="İşlem Türleri Dağılımı"
-                description={`İşlem adedi ve ciro payı · Tutara göre sıralı · ${currency}`}
+                description="İşlem adedi ve ciro payı · Tutara göre sıralı · TL"
                 icon={<Layers className="h-4 w-4" />}
               />
               <DistributionList items={overview.operationTypes} currency={currency} />
@@ -640,7 +608,7 @@ function Raporlar() {
             <div className="min-w-0 rounded-xl border border-border bg-card p-4 md:p-5">
               <ReportHeading
                 title="Ödeme Yöntemleri"
-                description={`Cironun ödeme yöntemlerine göre dağılımı · ${currency}`}
+                description="Cironun ödeme yöntemlerine göre dağılımı · TL"
                 icon={<CreditCard className="h-4 w-4" />}
               />
               <DistributionList

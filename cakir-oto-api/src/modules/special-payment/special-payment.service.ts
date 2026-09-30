@@ -15,6 +15,7 @@ import type {
   SpecialPaymentPeriod,
   SpecialPaymentPeriodFilter,
   SpecialPaymentSummaryDto,
+  SpecialPaymentTotals,
 } from "./special-payment.types.js";
 
 const categories = ["personnel", "expense", "invoice", "loan", "sgk", "meal"] as const;
@@ -80,9 +81,7 @@ export const parseSpecialPaymentCategory = (value: unknown): SpecialPaymentCateg
 export const parseSpecialPaymentPeriodFilter = (query: unknown): SpecialPaymentPeriodFilter => {
   const values = asRecord(query, "query");
   const rawPeriod = scalarString(values.period, "period");
-  const period: SpecialPaymentPeriod = rawPeriod
-    ? oneOf(rawPeriod, "period", periods)
-    : "month";
+  const period: SpecialPaymentPeriod = rawPeriod ? oneOf(rawPeriod, "period", periods) : "month";
   const date = parseDateKey(values.date, "date", currentIstanbulDate());
   const anchor = dateFromKey(date);
   let start: Date;
@@ -90,7 +89,9 @@ export const parseSpecialPaymentPeriodFilter = (query: unknown): SpecialPaymentP
 
   if (period === "day") {
     start = anchor;
-    end = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() + 1));
+    end = new Date(
+      Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() + 1),
+    );
   } else if (period === "month") {
     start = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1));
     end = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1, 1));
@@ -156,11 +157,11 @@ const categoryIdsByPayment = (rows: ExpenseCategoryRow[]) => {
 const decimalOrZero = (value: Prisma.Decimal | null | undefined): Prisma.Decimal =>
   value ?? new Prisma.Decimal(0);
 
-export const getSpecialPaymentSummary = async (
-  filter: SpecialPaymentPeriodFilter,
-): Promise<SpecialPaymentSummaryDto> => {
+const getSpecialPaymentTotals = async (dateWhere: {
+  gte?: Date;
+  lt: Date;
+}): Promise<SpecialPaymentTotals> => {
   const prisma = getPrisma();
-  const dateWhere = { gte: filter.start, lt: filter.end };
   const [personnel, loan, invoice, expenseCategories] = await Promise.all([
     prisma.expensePersonnelPayment.aggregate({
       where: { paymentDate: dateWhere },
@@ -190,18 +191,25 @@ export const getSpecialPaymentSummary = async (
   ]);
 
   return {
-    period: filter.period,
-    date: filter.date,
-    totals: {
-      personnel: moneyToString(decimalOrZero(personnel._sum.amount)),
-      expense: moneyToString(expense),
-      invoice: moneyToString(decimalOrZero(invoice._sum.amount)),
-      loan: moneyToString(decimalOrZero(loan._sum.amount)),
-      sgk: moneyToString(sgk),
-      meal: moneyToString(meal),
-    },
+    personnel: moneyToString(decimalOrZero(personnel._sum.amount)),
+    expense: moneyToString(expense),
+    invoice: moneyToString(decimalOrZero(invoice._sum.amount)),
+    loan: moneyToString(decimalOrZero(loan._sum.amount)),
+    sgk: moneyToString(sgk),
+    meal: moneyToString(meal),
   };
 };
+
+export const getSpecialPaymentSummary = async (
+  filter: SpecialPaymentPeriodFilter,
+): Promise<SpecialPaymentSummaryDto> => ({
+  period: filter.period,
+  date: filter.date,
+  totals: await getSpecialPaymentTotals({ gte: filter.start, lt: filter.end }),
+});
+
+export const getSpecialPaymentTotalsBefore = (end: Date): Promise<SpecialPaymentTotals> =>
+  getSpecialPaymentTotals({ lt: end });
 
 export const getSpecialPaymentDailyTotals = async (
   filter: SpecialPaymentPeriodFilter,
@@ -382,7 +390,12 @@ export const createSpecialPayment = async (
       if (!personnel) throw new HttpError(404, "Personel bulunamadı");
       if (!personnel.isActive) throw new HttpError(409, "Personel aktif değil");
       const row = await tx.expensePersonnelPayment.create({
-        data: { personnelId, paymentDate: input.paymentDate, amount: input.amount, note: input.note },
+        data: {
+          personnelId,
+          paymentDate: input.paymentDate,
+          amount: input.amount,
+          note: input.note,
+        },
       });
       return {
         id: row.id,
@@ -400,7 +413,12 @@ export const createSpecialPayment = async (
       if (!account) throw new HttpError(404, "Kredi hesabı bulunamadı");
       if (!account.isActive) throw new HttpError(409, "Kredi hesabı aktif değil");
       const row = await tx.loanPayment.create({
-        data: { loanAccountId, paymentDate: input.paymentDate, amount: input.amount, note: input.note },
+        data: {
+          loanAccountId,
+          paymentDate: input.paymentDate,
+          amount: input.amount,
+          note: input.note,
+        },
       });
       return {
         id: row.id,
@@ -418,7 +436,12 @@ export const createSpecialPayment = async (
       if (!invoiceType) throw new HttpError(404, "Fatura türü bulunamadı");
       if (!invoiceType.isActive) throw new HttpError(409, "Fatura türü aktif değil");
       const row = await tx.invoicePayment.create({
-        data: { invoiceTypeId, paymentDate: input.paymentDate, amount: input.amount, note: input.note },
+        data: {
+          invoiceTypeId,
+          paymentDate: input.paymentDate,
+          amount: input.amount,
+          note: input.note,
+        },
       });
       return {
         id: row.id,
