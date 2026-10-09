@@ -1,11 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Decimal from "decimal.js";
-import { ArrowLeft, Building2, FileSpreadsheet, Plus, RotateCcw, WalletCards } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  FileSpreadsheet,
+  NotebookPen,
+  Plus,
+  RotateCcw,
+  WalletCards,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { SupplierNotesDialog } from "@/components/supplier/SupplierNotesDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -231,6 +240,7 @@ function SupplierDetailReport() {
   const [transactionAt, setTransactionAt] = useState("");
   const [undoTarget, setUndoTarget] = useState<SupplierTransaction | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
 
   const period: MailOrderPeriod = month === "all" ? "year" : "month";
   const filterQuery = useMemo(() => {
@@ -492,6 +502,13 @@ function SupplierDetailReport() {
                 >
                   <WalletCards className="h-4 w-4" /> Ödeme Ekle
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setNotesDialogOpen(true)}
+                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-bold text-primary-foreground hover:opacity-90"
+                >
+                  <NotebookPen className="h-4 w-4" /> Not Ekle
+                </button>
               </div>
             </div>
 
@@ -554,6 +571,16 @@ function SupplierDetailReport() {
           </div>
         )}
       </main>
+
+      {selectedSupplier && (
+        <SupplierNotesDialog
+          key={selectedSupplier.id}
+          supplierId={selectedSupplier.id}
+          supplierName={selectedSupplier.name}
+          open={notesDialogOpen}
+          onOpenChange={setNotesDialogOpen}
+        />
+      )}
 
       <Dialog open={dialogKind !== null} onOpenChange={(open) => !open && setDialogKind(null)}>
         <DialogContent>

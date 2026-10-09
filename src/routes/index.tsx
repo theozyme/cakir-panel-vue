@@ -188,7 +188,7 @@ function Dashboard() {
   const [plateSuggestionsOpen, setPlateSuggestionsOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(getTodayDateKey);
   const [financeCurrency, setFinanceCurrency] = useState<Currency>("TRY");
-  const [paymentPeriod, setPaymentPeriod] = useState<DashboardPaymentPeriod>("month");
+  const [paymentPeriod, setPaymentPeriod] = useState<DashboardPaymentPeriod>("today");
   const [expandedVisitId, setExpandedVisitId] = useState<string | null>(null);
   const exchangeRateQuery = useQuery({
     queryKey: ["exchange-rate", "usd", "current"],
