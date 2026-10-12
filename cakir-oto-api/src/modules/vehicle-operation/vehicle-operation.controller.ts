@@ -5,9 +5,12 @@ import {
   deleteVehicleOperation,
   getVehicleOperationDetail,
   listDailyVehicleOperations,
-  listVehicleOperationHistory,
   updateVehicleOperation,
 } from "./vehicle-operation.service.js";
+import {
+  listVehicleOperationHistory,
+  listVehicleHistoryFilterOptions,
+} from "./vehicle-history.service.js";
 
 export const getVehicleOperations = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -23,13 +26,19 @@ export const getVehicleOperationHistory = async (
   next: NextFunction,
 ) => {
   try {
-    res.json(
-      await listVehicleOperationHistory({
-        search: req.query.search,
-        page: req.query.page,
-        pageSize: req.query.pageSize,
-      }),
-    );
+    res.json(await listVehicleOperationHistory(req.query));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getVehicleHistoryFilterOptions = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    res.json(await listVehicleHistoryFilterOptions());
   } catch (error) {
     next(error);
   }

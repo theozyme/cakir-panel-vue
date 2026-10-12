@@ -4,6 +4,7 @@ import {
   deleteVehicleOperationController,
   getVehicleOperation,
   getVehicleOperationHistory,
+  getVehicleHistoryFilterOptions,
   getVehicleOperations,
   patchVehicleOperation,
   postVehicleOperation,
@@ -12,6 +13,7 @@ import {
 export const vehicleOperationRouter = Router();
 
 vehicleOperationRouter.get("/history", getVehicleOperationHistory);
+vehicleOperationRouter.get("/history/filter-options", getVehicleHistoryFilterOptions);
 vehicleOperationRouter.get("/", getVehicleOperations);
 vehicleOperationRouter.post("/", postVehicleOperation);
 vehicleOperationRouter.get("/:id", getVehicleOperation);

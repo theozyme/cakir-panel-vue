@@ -113,6 +113,8 @@ export type VehicleOperationHistoryItem = {
   hasMailOrderImpact: boolean;
 };
 
+export type { HistoryFilters, HistorySearch, VehicleHistoryFilterOptions } from "../../../../shared/vehicle-history.js";
+
 export type VehicleOperationHistoryResponse = {
   items: VehicleOperationHistoryItem[];
   pagination: {
