@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildHistoryFilter, vehicleLabelOptions } from "./history-filters.js";
 import { HttpError } from "../../lib/http-error.js";
-import { historyQueryString, readHistorySearch } from "../../../../shared/vehicle-history.js";
+import { historyQueryString, readHistorySearch } from "../../../shared/vehicle-history.js";
 
 const labels = [
   { brand: "BMW", model: "320i" },

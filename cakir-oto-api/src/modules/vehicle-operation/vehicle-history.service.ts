@@ -5,7 +5,7 @@ import type {
   SupportedCurrency,
   VehicleOperationHistoryResponse,
 } from "./vehicle-operation.types.js";
-import type { VehicleHistoryFilterOptions } from "../../../../shared/vehicle-history.js";
+import type { VehicleHistoryFilterOptions } from "../../../shared/vehicle-history.js";
 
 const loadVehicleLabels = () =>
   getPrisma().vehicle.findMany({

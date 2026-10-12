@@ -7,7 +7,7 @@ import {
   normalizeVehicleLabel,
   type HistoryFilters,
   type VehicleHistoryFilterOptions,
-} from "../../../../shared/vehicle-history.js";
+} from "../../../shared/vehicle-history.js";
 
 export type VehicleLabels = { brand: string | null; model: string | null }[];
 export const vehicleLabelOptions = (
